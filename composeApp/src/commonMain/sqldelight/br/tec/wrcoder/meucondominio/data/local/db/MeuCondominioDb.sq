@@ -1,0 +1,45 @@
+-- Persistent schema used for offline cache. Feature repositories currently run on
+-- in-memory fakes; plugging real data sources into this schema is a matter of
+-- wiring queries from here into the repository implementations.
+
+CREATE TABLE IF NOT EXISTS user (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    role TEXT NOT NULL,
+    condominium_id TEXT NOT NULL,
+    unit_id TEXT
+);
+
+CREATE TABLE IF NOT EXISTS condominium (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    address TEXT NOT NULL,
+    code TEXT NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS unit (
+    id TEXT NOT NULL PRIMARY KEY,
+    condominium_id TEXT NOT NULL,
+    identifier TEXT NOT NULL,
+    block TEXT,
+    UNIQUE(condominium_id, identifier)
+);
+
+selectCurrentUser:
+SELECT * FROM user WHERE id = ?;
+
+upsertUser:
+INSERT OR REPLACE INTO user(id, name, email, role, condominium_id, unit_id)
+VALUES (?, ?, ?, ?, ?, ?);
+
+upsertCondominium:
+INSERT OR REPLACE INTO condominium(id, name, address, code)
+VALUES (?, ?, ?, ?);
+
+upsertUnit:
+INSERT OR REPLACE INTO unit(id, condominium_id, identifier, block)
+VALUES (?, ?, ?, ?);
+
+unitsByCondominium:
+SELECT * FROM unit WHERE condominium_id = ?;
