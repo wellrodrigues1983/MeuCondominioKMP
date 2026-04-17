@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import br.tec.wrcoder.meucondominio.domain.model.UserRole
 import br.tec.wrcoder.meucondominio.presentation.common.AppTopBar
+import br.tec.wrcoder.meucondominio.presentation.common.AvatarImage
 import br.tec.wrcoder.meucondominio.presentation.common.EmptyState
 import br.tec.wrcoder.meucondominio.presentation.common.PillTone
 import br.tec.wrcoder.meucondominio.presentation.common.SectionHeader
@@ -61,7 +62,7 @@ fun ChatThreadsScreen(vm: ChatThreadsViewModel = koinViewModel(), navigator: App
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     if (s.threads.isNotEmpty()) {
-                        item { SectionHeader("Conversas") }
+                        item { SectionHeader("Grupo e conversas") }
                         items(s.threads, key = { it.id }) { thread ->
                             Card(
                                 modifier = Modifier.fillMaxWidth().clickable { vm.open(thread) },
@@ -93,7 +94,9 @@ fun ChatThreadsScreen(vm: ChatThreadsViewModel = koinViewModel(), navigator: App
                             }
                         }
                     }
-                    item { SectionHeader("Contatos do condomínio") }
+                    if (s.contacts.isNotEmpty()) {
+                        item { SectionHeader("Supervisores — conversa privada") }
+                    }
                     items(s.contacts, key = { it.id }) { contact ->
                         Card(
                             modifier = Modifier.fillMaxWidth().clickable { vm.openOrCreate(contact) },
@@ -105,10 +108,12 @@ fun ChatThreadsScreen(vm: ChatThreadsViewModel = koinViewModel(), navigator: App
                                 Modifier.padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Avatar(
-                                    contact.name,
-                                    MaterialTheme.colorScheme.secondaryContainer,
-                                    MaterialTheme.colorScheme.onSecondaryContainer,
+                                AvatarImage(
+                                    name = contact.name,
+                                    avatarUrl = contact.avatarUrl,
+                                    background = MaterialTheme.colorScheme.secondaryContainer,
+                                    foreground = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    size = 40.dp,
                                 )
                                 Spacer(Modifier.size(12.dp))
                                 Column(Modifier.weight(1f)) {

@@ -65,6 +65,11 @@ kotlin {
             implementation(libs.koin.core)
             implementation(libs.koin.compose)
             implementation(libs.koin.composeViewmodel)
+
+            implementation(libs.peekaboo.imagePicker)
+            implementation(libs.filekit.core)
+            implementation(libs.filekit.compose)
+            implementation(libs.coil.compose)
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)

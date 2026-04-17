@@ -1,6 +1,7 @@
 package br.tec.wrcoder.meucondominio.di
 
 import br.tec.wrcoder.meucondominio.core.AppClock
+import br.tec.wrcoder.meucondominio.core.BinaryStore
 import br.tec.wrcoder.meucondominio.core.SystemAppClock
 import br.tec.wrcoder.meucondominio.core.storage.SecureStorage
 import br.tec.wrcoder.meucondominio.core.storage.createSecureStorage
@@ -58,6 +59,7 @@ import org.koin.dsl.module
 fun commonModule(): Module = module {
     single<AppClock> { SystemAppClock() }
     single<SecureStorage> { createSecureStorage() }
+    single { BinaryStore() }
     single { InMemoryStore().also { SampleDataSeeder.seed(it, get()) } }
 
     single { createHttpClient(get()) }

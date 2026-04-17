@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import br.tec.wrcoder.meucondominio.core.AppResult
 import br.tec.wrcoder.meucondominio.domain.model.ChatThread
 import br.tec.wrcoder.meucondominio.domain.model.User
+import br.tec.wrcoder.meucondominio.domain.model.UserRole
 import br.tec.wrcoder.meucondominio.domain.repository.AuthRepository
 import br.tec.wrcoder.meucondominio.data.repository.InMemoryStore
 import br.tec.wrcoder.meucondominio.domain.repository.ChatRepository
@@ -50,7 +51,11 @@ class ChatThreadsViewModel(
             threads = threads,
             me = u,
             contacts = if (u == null) emptyList()
-            else users.filter { it.condominiumId == u.condominiumId && it.id != u.id },
+            else users.filter {
+                it.condominiumId == u.condominiumId &&
+                    it.id != u.id &&
+                    it.role == UserRole.SUPERVISOR
+            },
             error = error,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, ChatThreadsUiState())

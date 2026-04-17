@@ -23,6 +23,8 @@ data class FileEditor(
     val title: String = "",
     val description: String = "",
     val fileName: String = "",
+    val fileBytes: ByteArray? = null,
+    val sizeBytes: Long = 0L,
     val visible: Boolean = false,
 )
 
@@ -61,15 +63,24 @@ class FilesViewModel(
     fun dismiss() = _editor.update { it.copy(visible = false) }
     fun update(transform: FileEditor.() -> FileEditor) = _editor.update(transform)
 
+    fun onFilePicked(fileName: String, bytes: ByteArray) = _editor.update {
+        it.copy(fileName = fileName, fileBytes = bytes, sizeBytes = bytes.size.toLong())
+    }
+
     fun submit() {
         val u = user.value ?: return
         val e = _editor.value
+        val bytes = e.fileBytes
+        if (bytes == null || e.fileName.isBlank()) {
+            _error.value = "Selecione um arquivo PDF"
+            return
+        }
         if (!e.fileName.endsWith(".pdf", ignoreCase = true)) {
             _error.value = "Somente arquivos PDF"
             return
         }
         viewModelScope.launch {
-            val r = files.upload(u.condominiumId, u.id, e.title, e.description.ifBlank { null }, e.fileName, 0L, ByteArray(0))
+            val r = files.upload(u.condominiumId, u.id, e.title, e.description.ifBlank { null }, e.fileName, e.sizeBytes, bytes)
             when (r) {
                 is AppResult.Success -> _editor.value = FileEditor()
                 is AppResult.Failure -> _error.value = r.error.message

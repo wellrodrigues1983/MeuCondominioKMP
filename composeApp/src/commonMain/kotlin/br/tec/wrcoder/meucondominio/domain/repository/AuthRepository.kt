@@ -18,4 +18,5 @@ interface AuthRepository {
     suspend fun currentUser(): User?
     suspend fun createUnitMember(input: CreateMemberInput): AppResult<User>
     suspend fun listUnitMembers(unitId: String): AppResult<List<User>>
+    suspend fun updateAvatar(userId: String, avatarUrl: String?): AppResult<User>
 }

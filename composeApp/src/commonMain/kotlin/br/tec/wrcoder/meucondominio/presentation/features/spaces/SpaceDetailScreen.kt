@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -41,6 +42,7 @@ import br.tec.wrcoder.meucondominio.domain.model.ReservationStatus
 import br.tec.wrcoder.meucondominio.domain.repository.SpaceRepository
 import br.tec.wrcoder.meucondominio.presentation.common.AppTopBar
 import br.tec.wrcoder.meucondominio.presentation.common.IconBadge
+import br.tec.wrcoder.meucondominio.presentation.common.MemoryImage
 import br.tec.wrcoder.meucondominio.presentation.common.SectionHeader
 import br.tec.wrcoder.meucondominio.presentation.navigation.AppNavigator
 import kotlinx.datetime.LocalDate
@@ -125,13 +127,16 @@ fun SpaceDetailScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
-                if (space.imageUrls.isNotEmpty()) {
-                    Spacer(Modifier.size(8.dp))
-                    space.imageUrls.forEach { url ->
-                        Text(
-                            url,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                space.imageUrls.firstOrNull()?.let { url ->
+                    Spacer(Modifier.size(12.dp))
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        MemoryImage(
+                            url = url,
+                            fallbackIcon = Icons.Filled.Deck,
+                            modifier = Modifier.fillMaxWidth().height(200.dp),
                         )
                     }
                 }

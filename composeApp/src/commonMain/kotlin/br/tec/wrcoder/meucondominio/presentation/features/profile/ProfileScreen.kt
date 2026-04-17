@@ -1,5 +1,6 @@
 package br.tec.wrcoder.meucondominio.presentation.features.profile
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lock
@@ -35,6 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -43,16 +46,25 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import br.tec.wrcoder.meucondominio.domain.model.UserRole
 import br.tec.wrcoder.meucondominio.presentation.common.AppTopBar
+import br.tec.wrcoder.meucondominio.presentation.common.AvatarImage
 import br.tec.wrcoder.meucondominio.presentation.common.PillTone
 import br.tec.wrcoder.meucondominio.presentation.common.SectionHeader
 import br.tec.wrcoder.meucondominio.presentation.common.StatusPill
 import br.tec.wrcoder.meucondominio.presentation.navigation.AppNavigator
+import com.preat.peekaboo.image.picker.SelectionMode
+import com.preat.peekaboo.image.picker.rememberImagePickerLauncher
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun ProfileScreen(vm: ProfileViewModel = koinViewModel(), navigator: AppNavigator = koinInject()) {
     val s by vm.state.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    val avatarPicker = rememberImagePickerLauncher(
+        selectionMode = SelectionMode.Single,
+        scope = scope,
+        onResult = { bytes -> bytes.firstOrNull()?.let(vm::onAvatarPicked) },
+    )
     Scaffold(
         topBar = { AppTopBar("Perfil", onBack = { navigator.back() }) },
         floatingActionButton = {
@@ -81,18 +93,31 @@ fun ProfileScreen(vm: ProfileViewModel = koinViewModel(), navigator: AppNavigato
                             modifier = Modifier.padding(20.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(72.dp),
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text(
-                                        user.name.firstOrNull()?.uppercase() ?: "?",
-                                        style = MaterialTheme.typography.headlineMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onPrimary,
-                                    )
+                            Box(contentAlignment = Alignment.BottomEnd) {
+                                AvatarImage(
+                                    name = user.name,
+                                    avatarUrl = user.avatarUrl,
+                                    background = MaterialTheme.colorScheme.primary,
+                                    foreground = MaterialTheme.colorScheme.onPrimary,
+                                    size = 84.dp,
+                                    textStyle = MaterialTheme.typography.headlineMedium,
+                                    modifier = Modifier.clickable { avatarPicker.launch() },
+                                )
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.secondary,
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .clickable { avatarPicker.launch() },
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            Icons.Filled.AddAPhoto,
+                                            contentDescription = "Alterar foto",
+                                            tint = MaterialTheme.colorScheme.onSecondary,
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                    }
                                 }
                             }
                             Spacer(Modifier.height(12.dp))
@@ -147,19 +172,13 @@ fun ProfileScreen(vm: ProfileViewModel = koinViewModel(), navigator: AppNavigato
                             Modifier.padding(14.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.secondaryContainer,
-                                modifier = Modifier.size(40.dp),
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text(
-                                        member.name.firstOrNull()?.uppercase() ?: "?",
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    )
-                                }
-                            }
+                            AvatarImage(
+                                name = member.name,
+                                avatarUrl = member.avatarUrl,
+                                background = MaterialTheme.colorScheme.secondaryContainer,
+                                foreground = MaterialTheme.colorScheme.onSecondaryContainer,
+                                size = 40.dp,
+                            )
                             Spacer(Modifier.size(12.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(

@@ -4,7 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import br.tec.wrcoder.meucondominio.core.AppClock
 import br.tec.wrcoder.meucondominio.core.AppResult
-import br.tec.wrcoder.meucondominio.core.toLocalDateTime
+import br.tec.wrcoder.meucondominio.core.toLocalDate
 import br.tec.wrcoder.meucondominio.domain.model.Action
 import br.tec.wrcoder.meucondominio.domain.model.MovingRequest
 import br.tec.wrcoder.meucondominio.domain.model.Permissions
@@ -22,9 +22,20 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.datetime.DatePeriod
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.LocalTime
+import kotlinx.datetime.plus
 
-data class MovingEditor(val dateText: String = "", val visible: Boolean = false)
+const val MOVING_MAX_DAYS_AHEAD = 30
+
+data class MovingEditor(
+    val date: LocalDate? = null,
+    val hour: Int = 9,
+    val minute: Int = 0,
+    val visible: Boolean = false,
+)
 
 data class MovingUiState(
     val items: List<MovingRequest> = emptyList(),
@@ -32,6 +43,7 @@ data class MovingUiState(
     val canDecide: Boolean = false,
     val canCreate: Boolean = false,
     val editor: MovingEditor = MovingEditor(),
+    val today: LocalDate? = null,
     val error: String? = null,
 )
 
@@ -45,6 +57,8 @@ class MovingViewModel(
     private val user = auth.session.map { it?.user }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
     private val _editor = MutableStateFlow(MovingEditor())
     private val _error = MutableStateFlow<String?>(null)
+
+    private fun today(): LocalDate = clock.now().toLocalDate(clock.timeZone())
 
     val state = combine(
         user.flatMapLatest { u ->
@@ -64,26 +78,35 @@ class MovingViewModel(
             canDecide = u != null && Permissions.canPerform(u.role, Action.MOVING_REQUEST_DECIDE),
             canCreate = u != null && Permissions.canPerform(u.role, Action.MOVING_REQUEST_CREATE) && u.unitId != null,
             editor = editor,
+            today = today(),
             error = error,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, MovingUiState())
 
     fun showCreate() = _editor.update {
-        MovingEditor(dateText = clock.now().toLocalDateTime().toString(), visible = true)
+        MovingEditor(date = today(), hour = 9, minute = 0, visible = true)
     }
     fun dismiss() = _editor.update { it.copy(visible = false) }
-    fun onDate(v: String) = _editor.update { it.copy(dateText = v) }
+    fun onDate(date: LocalDate) = _editor.update { it.copy(date = date) }
+    fun onTime(hour: Int, minute: Int) = _editor.update { it.copy(hour = hour, minute = minute) }
 
     fun submit() {
         val u = user.value ?: return
         val unitId = u.unitId ?: return
-        val date = runCatching { LocalDateTime.parse(_editor.value.dateText) }.getOrNull()
-        if (date == null) {
-            _error.value = "Data inválida (ex: 2026-05-01T10:00)"
+        val e = _editor.value
+        val date = e.date ?: run {
+            _error.value = "Selecione uma data"
             return
         }
+        val today = today()
+        val max = today.plus(DatePeriod(days = MOVING_MAX_DAYS_AHEAD))
+        if (date < today || date > max) {
+            _error.value = "A data deve estar nos próximos $MOVING_MAX_DAYS_AHEAD dias"
+            return
+        }
+        val scheduled = LocalDateTime(date, LocalTime(e.hour, e.minute))
         viewModelScope.launch {
-            val r = moving.request(u.condominiumId, unitId, u.id, date)
+            val r = moving.request(u.condominiumId, unitId, u.id, scheduled)
             if (r is AppResult.Failure) _error.value = r.error.message else _editor.value = MovingEditor()
         }
     }

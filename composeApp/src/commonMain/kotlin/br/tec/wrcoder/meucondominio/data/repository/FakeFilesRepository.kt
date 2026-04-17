@@ -3,6 +3,7 @@ package br.tec.wrcoder.meucondominio.data.repository
 import br.tec.wrcoder.meucondominio.core.AppClock
 import br.tec.wrcoder.meucondominio.core.AppError
 import br.tec.wrcoder.meucondominio.core.AppResult
+import br.tec.wrcoder.meucondominio.core.BinaryStore
 import br.tec.wrcoder.meucondominio.core.asFailure
 import br.tec.wrcoder.meucondominio.core.asSuccess
 import br.tec.wrcoder.meucondominio.core.newId
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.map
 class FakeFilesRepository(
     private val store: InMemoryStore,
     private val clock: AppClock,
+    private val binaryStore: BinaryStore,
 ) : FilesRepository {
 
     override fun observe(condominiumId: String): Flow<List<FileDoc>> =
@@ -32,18 +34,20 @@ class FakeFilesRepository(
             return AppError.Validation("Apenas arquivos PDF são aceitos").asFailure()
         }
         if (title.isBlank()) return AppError.Validation("Informe um título").asFailure()
+        if (bytes.isEmpty()) return AppError.Validation("Arquivo vazio").asFailure()
+        val url = binaryStore.putFile(fileName, bytes)
         val doc = FileDoc(
             id = newId(),
             condominiumId = condominiumId,
             title = title.trim(),
             description = description?.trim(),
-            fileUrl = "memory://files/${fileName}",
-            sizeBytes = sizeBytes,
+            fileUrl = url,
+            sizeBytes = if (sizeBytes > 0) sizeBytes else bytes.size.toLong(),
             uploadedByUserId = uploadedByUserId,
             uploadedAt = clock.now(),
         )
         store.files.value = store.files.value + doc
-        return doc.asSuccess().also { @Suppress("UNUSED_EXPRESSION") bytes }
+        return doc.asSuccess()
     }
 
     override suspend fun delete(id: String): AppResult<Unit> {

@@ -4,6 +4,8 @@ import br.tec.wrcoder.meucondominio.core.AppClock
 import br.tec.wrcoder.meucondominio.core.newCondoCode
 import br.tec.wrcoder.meucondominio.core.newId
 import br.tec.wrcoder.meucondominio.core.toLocalDate
+import br.tec.wrcoder.meucondominio.domain.model.ChatMessage
+import br.tec.wrcoder.meucondominio.domain.model.ChatThread
 import br.tec.wrcoder.meucondominio.domain.model.CommonSpace
 import br.tec.wrcoder.meucondominio.domain.model.Condominium
 import br.tec.wrcoder.meucondominio.domain.model.CondoUnit
@@ -143,6 +145,28 @@ object SampleDataSeeder {
             seedReservation(salao, blockAUnits[1], 7, "Morador 102"),
             seedReservation(salao, blockAUnits[2], 21, "Morador 201"),
             seedReservation(churrasqueira, blockBUnits[0], 14, "Morador 301"),
+        )
+
+        val groupThreadId = "group-${condo.id}"
+        store.chatThreads.value = listOf(
+            ChatThread(
+                id = groupThreadId,
+                condominiumId = condo.id,
+                title = "Grupo do condomínio",
+                participantUserIds = listOf(admin.id, supervisor.id, resident.id),
+                lastMessagePreview = "Bem-vindos ao grupo do condomínio!",
+                lastMessageAt = now,
+            )
+        )
+        store.chatMessages.value = listOf(
+            ChatMessage(
+                id = newId(),
+                threadId = groupThreadId,
+                senderUserId = admin.id,
+                senderName = admin.name,
+                text = "Bem-vindos ao grupo do condomínio!",
+                sentAt = now,
+            )
         )
 
         store.polls.value = listOf(

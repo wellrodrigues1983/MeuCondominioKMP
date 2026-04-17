@@ -3,6 +3,7 @@ package br.tec.wrcoder.meucondominio.presentation.features.marketplace
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import br.tec.wrcoder.meucondominio.core.AppResult
+import br.tec.wrcoder.meucondominio.core.BinaryStore
 import br.tec.wrcoder.meucondominio.domain.model.Action
 import br.tec.wrcoder.meucondominio.domain.model.Listing
 import br.tec.wrcoder.meucondominio.domain.model.Permissions
@@ -26,7 +27,7 @@ data class ListingEditor(
     val title: String = "",
     val description: String = "",
     val price: String = "",
-    val imageUrls: String = "",
+    val imageBytes: ByteArray? = null,
     val visible: Boolean = false,
 )
 
@@ -44,6 +45,7 @@ class MarketplaceViewModel(
     private val auth: AuthRepository,
     private val condos: CondominiumRepository,
     private val renewListingUseCase: RenewListingUseCase,
+    private val binaryStore: BinaryStore,
 ) : ViewModel() {
 
     private val user = auth.session.map { it?.user }
@@ -80,7 +82,7 @@ class MarketplaceViewModel(
         }
         val e = _editor.value
         val price = e.price.replace(',', '.').toDoubleOrNull()
-        val images = e.imageUrls.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+        val images = e.imageBytes?.let { listOf(binaryStore.putImage(it)) } ?: emptyList()
         viewModelScope.launch {
             val unit = (condos.listUnits(u.condominiumId) as? AppResult.Success)?.data
                 ?.firstOrNull { it.id == unitId }

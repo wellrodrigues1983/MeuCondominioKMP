@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -40,6 +41,8 @@ import br.tec.wrcoder.meucondominio.domain.model.ListingStatus
 import br.tec.wrcoder.meucondominio.presentation.common.AppTopBar
 import br.tec.wrcoder.meucondominio.presentation.common.EmptyState
 import br.tec.wrcoder.meucondominio.presentation.common.IconBadge
+import br.tec.wrcoder.meucondominio.presentation.common.ImagePickerField
+import br.tec.wrcoder.meucondominio.presentation.common.MemoryImage
 import br.tec.wrcoder.meucondominio.presentation.common.PillTone
 import br.tec.wrcoder.meucondominio.presentation.common.StatusPill
 import br.tec.wrcoder.meucondominio.presentation.navigation.AppNavigator
@@ -112,11 +115,11 @@ fun MarketplaceScreen(vm: MarketplaceViewModel = koinViewModel(), navigator: App
                         label = { Text("Preço (opcional)") },
                         shape = RoundedCornerShape(12.dp),
                     )
-                    OutlinedTextField(
-                        s.editor.imageUrls,
-                        { v -> vm.update { copy(imageUrls = v) } },
-                        label = { Text("URLs (vírgula)") },
-                        shape = RoundedCornerShape(12.dp),
+                    ImagePickerField(
+                        currentBytes = s.editor.imageBytes,
+                        onPicked = { bytes -> vm.update { copy(imageBytes = bytes) } },
+                        label = "Selecionar foto do produto",
+                        fallbackIcon = Icons.Filled.Storefront,
                     )
                 }
             },
@@ -147,61 +150,71 @@ private fun ListingCard(listing: Listing, isOwner: Boolean, onClose: () -> Unit,
         shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
-        Row(Modifier.padding(16.dp)) {
-            IconBadge(
-                icon = Icons.Filled.Storefront,
-                tint = MaterialTheme.colorScheme.onTertiaryContainer,
-                background = MaterialTheme.colorScheme.tertiaryContainer,
-                size = 44.dp,
-                iconSize = 22.dp,
-            )
-            Spacer(Modifier.size(12.dp))
-            Column(Modifier.weight(1f)) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        listing.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.weight(1f),
-                    )
-                    StatusPill(text = statusLabel, tone = statusTone)
-                }
-                Text(
-                    listing.description,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+        Column {
+            val photoUrl = listing.imageUrls.firstOrNull()
+            if (photoUrl != null) {
+                MemoryImage(
+                    url = photoUrl,
+                    fallbackIcon = Icons.Filled.Storefront,
+                    modifier = Modifier.fillMaxWidth().height(160.dp),
                 )
-                listing.price?.let {
-                    Text(
-                        "R$ $it",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-                Text(
-                    "${listing.authorName} · Unidade ${listing.unitIdentifier}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            }
+            Row(Modifier.padding(16.dp)) {
+                IconBadge(
+                    icon = Icons.Filled.Storefront,
+                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                    background = MaterialTheme.colorScheme.tertiaryContainer,
+                    size = 44.dp,
+                    iconSize = 22.dp,
                 )
-                if (isOwner) {
-                    Spacer(Modifier.size(4.dp))
-                    Row {
-                        if (listing.status == ListingStatus.ACTIVE) {
-                            TextButton(onClick = onClose) {
-                                Icon(Icons.Filled.Block, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.size(6.dp))
-                                Text("Encerrar")
+                Spacer(Modifier.size(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            listing.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f),
+                        )
+                        StatusPill(text = statusLabel, tone = statusTone)
+                    }
+                    Text(
+                        listing.description,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    listing.price?.let {
+                        Text(
+                            "R$ $it",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                    Text(
+                        "${listing.authorName} · Unidade ${listing.unitIdentifier}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (isOwner) {
+                        Spacer(Modifier.size(4.dp))
+                        Row {
+                            if (listing.status == ListingStatus.ACTIVE) {
+                                TextButton(onClick = onClose) {
+                                    Icon(Icons.Filled.Block, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.size(6.dp))
+                                    Text("Encerrar")
+                                }
                             }
-                        }
-                        if (listing.status == ListingStatus.EXPIRED || listing.status == ListingStatus.CLOSED) {
-                            TextButton(onClick = onRenew) {
-                                Icon(Icons.Filled.Autorenew, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.size(6.dp))
-                                Text("Renovar 30 dias")
+                            if (listing.status == ListingStatus.EXPIRED || listing.status == ListingStatus.CLOSED) {
+                                TextButton(onClick = onRenew) {
+                                    Icon(Icons.Filled.Autorenew, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.size(6.dp))
+                                    Text("Renovar 30 dias")
+                                }
                             }
                         }
                     }

@@ -3,6 +3,7 @@ package br.tec.wrcoder.meucondominio.presentation.features.spaces
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import br.tec.wrcoder.meucondominio.core.AppResult
+import br.tec.wrcoder.meucondominio.core.BinaryStore
 import br.tec.wrcoder.meucondominio.domain.model.Action
 import br.tec.wrcoder.meucondominio.domain.model.CommonSpace
 import br.tec.wrcoder.meucondominio.domain.model.Permissions
@@ -29,7 +30,7 @@ data class SpaceEditor(
     val name: String = "",
     val description: String = "",
     val price: String = "",
-    val imageUrls: String = "",
+    val imageBytes: ByteArray? = null,
     val visible: Boolean = false,
 )
 
@@ -48,6 +49,7 @@ class SpacesViewModel(
     private val auth: AuthRepository,
     private val cancelReservationUseCase: CancelReservationUseCase,
     private val navigator: AppNavigator,
+    private val binaryStore: BinaryStore,
 ) : ViewModel() {
 
     private val user = auth.session.map { it?.user }
@@ -91,7 +93,7 @@ class SpacesViewModel(
             _error.value = "Valor inválido"
             return
         }
-        val images = e.imageUrls.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+        val images = e.imageBytes?.let { listOf(binaryStore.putImage(it)) } ?: emptyList()
         viewModelScope.launch {
             when (val r = spaceRepository.createSpace(u.condominiumId, e.name, e.description, price, images)) {
                 is AppResult.Success -> _editor.value = SpaceEditor()

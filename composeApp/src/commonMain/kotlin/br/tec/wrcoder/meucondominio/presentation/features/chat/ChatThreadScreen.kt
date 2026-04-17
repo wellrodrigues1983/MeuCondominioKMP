@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import br.tec.wrcoder.meucondominio.presentation.common.AppTopBar
+import br.tec.wrcoder.meucondominio.presentation.common.AvatarImage
 import br.tec.wrcoder.meucondominio.presentation.navigation.AppNavigator
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
@@ -62,10 +63,23 @@ fun ChatThreadScreen(
                 ) {
                     items(s.messages, key = { it.id }) { msg ->
                         val isMine = msg.senderUserId == s.me?.id
+                        val sender = s.usersById[msg.senderUserId]
                         Row(
                             Modifier.fillMaxWidth(),
                             horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
+                            verticalAlignment = Alignment.Bottom,
                         ) {
+                            if (!isMine) {
+                                AvatarImage(
+                                    name = sender?.name ?: msg.senderName,
+                                    avatarUrl = sender?.avatarUrl,
+                                    background = MaterialTheme.colorScheme.secondaryContainer,
+                                    foreground = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    size = 32.dp,
+                                    textStyle = MaterialTheme.typography.labelMedium,
+                                )
+                                Spacer(Modifier.size(6.dp))
+                            }
                             Surface(
                                 color = if (isMine) MaterialTheme.colorScheme.primary
                                 else MaterialTheme.colorScheme.surfaceVariant,

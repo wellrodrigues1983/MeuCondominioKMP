@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -42,6 +43,8 @@ import br.tec.wrcoder.meucondominio.domain.model.ReservationStatus
 import br.tec.wrcoder.meucondominio.presentation.common.AppTopBar
 import br.tec.wrcoder.meucondominio.presentation.common.EmptyState
 import br.tec.wrcoder.meucondominio.presentation.common.IconBadge
+import br.tec.wrcoder.meucondominio.presentation.common.ImagePickerField
+import br.tec.wrcoder.meucondominio.presentation.common.MemoryImage
 import br.tec.wrcoder.meucondominio.presentation.common.PillTone
 import br.tec.wrcoder.meucondominio.presentation.common.SectionHeader
 import br.tec.wrcoder.meucondominio.presentation.common.StatusPill
@@ -120,11 +123,11 @@ fun SpacesScreen(vm: SpacesViewModel = koinViewModel(), navigator: AppNavigator 
                         label = { Text("Valor (R$)") },
                         shape = RoundedCornerShape(12.dp),
                     )
-                    OutlinedTextField(
-                        s.editor.imageUrls,
-                        onValueChange = { vm.update { copy(imageUrls = it) } },
-                        label = { Text("URLs de imagens (vírgula)") },
-                        shape = RoundedCornerShape(12.dp),
+                    ImagePickerField(
+                        currentBytes = s.editor.imageBytes,
+                        onPicked = { bytes -> vm.update { copy(imageBytes = bytes) } },
+                        label = "Selecionar foto do espaço",
+                        fallbackIcon = Icons.Filled.Deck,
                     )
                 }
             },
@@ -149,33 +152,43 @@ private fun SpaceCard(space: CommonSpace, onClick: () -> Unit) {
         shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
-        Row(Modifier.padding(16.dp)) {
-            IconBadge(
-                icon = Icons.Filled.Deck,
-                tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                background = MaterialTheme.colorScheme.secondaryContainer,
-                size = 44.dp,
-                iconSize = 22.dp,
-            )
-            Spacer(Modifier.size(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    space.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+        Column {
+            val photoUrl = space.imageUrls.firstOrNull()
+            if (photoUrl != null) {
+                MemoryImage(
+                    url = photoUrl,
+                    fallbackIcon = Icons.Filled.Deck,
+                    modifier = Modifier.fillMaxWidth().height(140.dp),
                 )
-                Text(
-                    space.description,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            }
+            Row(Modifier.padding(16.dp)) {
+                IconBadge(
+                    icon = Icons.Filled.Deck,
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                    background = MaterialTheme.colorScheme.secondaryContainer,
+                    size = 44.dp,
+                    iconSize = 22.dp,
                 )
-                Spacer(Modifier.size(4.dp))
-                Text(
-                    "R$ ${space.price}",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold,
-                )
+                Spacer(Modifier.size(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        space.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        space.description,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.size(4.dp))
+                    Text(
+                        "R$ ${space.price}",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
             }
         }
     }

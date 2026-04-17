@@ -3,6 +3,7 @@ package br.tec.wrcoder.meucondominio.presentation.features.profile
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import br.tec.wrcoder.meucondominio.core.AppResult
+import br.tec.wrcoder.meucondominio.core.BinaryStore
 import br.tec.wrcoder.meucondominio.domain.model.CondoUnit
 import br.tec.wrcoder.meucondominio.domain.model.CreateMemberInput
 import br.tec.wrcoder.meucondominio.domain.model.User
@@ -34,6 +35,7 @@ data class ProfileUiState(
 class ProfileViewModel(
     private val auth: AuthRepository,
     private val condos: CondominiumRepository,
+    private val binaryStore: BinaryStore,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ProfileUiState())
@@ -79,4 +81,15 @@ class ProfileViewModel(
     }
 
     fun clearError() = _state.update { it.copy(error = null) }
+
+    fun onAvatarPicked(bytes: ByteArray) {
+        val uid = _state.value.user?.id ?: return
+        val url = binaryStore.putImage(bytes)
+        viewModelScope.launch {
+            when (val r = auth.updateAvatar(uid, url)) {
+                is AppResult.Success -> Unit
+                is AppResult.Failure -> _state.update { it.copy(error = r.error.message) }
+            }
+        }
+    }
 }

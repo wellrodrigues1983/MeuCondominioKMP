@@ -111,6 +111,7 @@ class FakeAuthRepository(
             store.units.value = store.units.value.map { if (it.id == unit.id) it.copy(ownerUserId = user.id) else it }
         }
         store.passwords[input.email.lowercase()] = input.password
+        joinGroupChat(user.id, condo.id)
         val session = buildSession(user)
         persist(session)
         return session.asSuccess()
@@ -145,11 +146,33 @@ class FakeAuthRepository(
         )
         store.users.value = store.users.value + member
         store.passwords[input.email.lowercase()] = input.password
+        joinGroupChat(member.id, member.condominiumId)
         return member.asSuccess()
+    }
+
+    private fun joinGroupChat(userId: String, condoId: String) {
+        val groupId = "group-$condoId"
+        store.chatThreads.value = store.chatThreads.value.map {
+            if (it.id == groupId && userId !in it.participantUserIds) {
+                it.copy(participantUserIds = it.participantUserIds + userId)
+            } else it
+        }
     }
 
     override suspend fun listUnitMembers(unitId: String): AppResult<List<User>> =
         store.users.value.filter { it.unitId == unitId }.asSuccess()
+
+    override suspend fun updateAvatar(userId: String, avatarUrl: String?): AppResult<User> {
+        val updated = store.users.value.firstOrNull { it.id == userId }?.copy(avatarUrl = avatarUrl)
+            ?: return AppError.NotFound("Usuário não encontrado").asFailure()
+        store.users.value = store.users.value.map { if (it.id == userId) updated else it }
+        _session.value?.let { current ->
+            if (current.user.id == userId) {
+                _session.value = current.copy(user = updated)
+            }
+        }
+        return updated.asSuccess()
+    }
 
     private fun buildSession(user: User): AuthSession {
         val session = AuthSession(token = "fake-token-${user.id}", user = user, issuedAt = clock.now())

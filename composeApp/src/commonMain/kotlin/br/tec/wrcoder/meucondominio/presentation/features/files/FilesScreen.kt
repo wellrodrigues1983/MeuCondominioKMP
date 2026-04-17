@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.AlertDialog
@@ -25,12 +26,14 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -41,12 +44,29 @@ import br.tec.wrcoder.meucondominio.presentation.common.AppTopBar
 import br.tec.wrcoder.meucondominio.presentation.common.EmptyState
 import br.tec.wrcoder.meucondominio.presentation.common.IconBadge
 import br.tec.wrcoder.meucondominio.presentation.navigation.AppNavigator
+import io.github.vinceglb.filekit.compose.rememberFilePickerLauncher
+import io.github.vinceglb.filekit.core.PickerType
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun FilesScreen(vm: FilesViewModel = koinViewModel(), navigator: AppNavigator = koinInject()) {
     val s by vm.state.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+
+    val pdfLauncher = rememberFilePickerLauncher(
+        type = PickerType.File(extensions = listOf("pdf")),
+        title = "Selecione um PDF",
+    ) { file ->
+        if (file != null) {
+            scope.launch {
+                val bytes = file.readBytes()
+                vm.onFilePicked(file.name, bytes)
+            }
+        }
+    }
+
     Scaffold(
         topBar = { AppTopBar("Arquivos", onBack = { navigator.back() }) },
         floatingActionButton = {
@@ -85,25 +105,40 @@ fun FilesScreen(vm: FilesViewModel = koinViewModel(), navigator: AppNavigator = 
             onDismissRequest = vm::dismiss,
             title = { Text("Enviar PDF") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(
                         s.editor.title,
                         { v -> vm.update { copy(title = v) } },
                         label = { Text("Título") },
                         shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
                     )
                     OutlinedTextField(
                         s.editor.description,
                         { v -> vm.update { copy(description = v) } },
                         label = { Text("Descrição (opcional)") },
                         shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
                     )
-                    OutlinedTextField(
-                        s.editor.fileName,
-                        { v -> vm.update { copy(fileName = v) } },
-                        label = { Text("Nome do arquivo (.pdf)") },
+                    OutlinedButton(
+                        onClick = { pdfLauncher.launch() },
                         shape = RoundedCornerShape(12.dp),
-                    )
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Filled.FolderOpen, contentDescription = null)
+                        Spacer(Modifier.size(8.dp))
+                        Text(
+                            if (s.editor.fileName.isBlank()) "Escolher PDF do dispositivo"
+                            else s.editor.fileName,
+                        )
+                    }
+                    if (s.editor.sizeBytes > 0) {
+                        Text(
+                            "Tamanho: ${formatBytes(s.editor.sizeBytes)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             },
             confirmButton = { TextButton(onClick = vm::submit) { Text("Enviar") } },
@@ -119,6 +154,14 @@ fun FilesScreen(vm: FilesViewModel = koinViewModel(), navigator: AppNavigator = 
             text = { Text(it) },
         )
     }
+}
+
+private fun formatBytes(bytes: Long): String {
+    if (bytes < 1024) return "$bytes B"
+    val kb = bytes / 1024.0
+    if (kb < 1024.0) return "${(kb * 10).toLong() / 10.0} KB"
+    val mb = kb / 1024.0
+    return "${(mb * 10).toLong() / 10.0} MB"
 }
 
 @Composable
@@ -154,7 +197,7 @@ private fun FileCard(file: FileDoc, canManage: Boolean, onDelete: () -> Unit) {
                     )
                 }
                 Text(
-                    file.fileUrl,
+                    formatBytes(file.sizeBytes),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

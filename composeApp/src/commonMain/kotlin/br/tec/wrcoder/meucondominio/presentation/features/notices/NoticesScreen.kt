@@ -33,6 +33,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -51,6 +54,8 @@ import org.koin.compose.viewmodel.koinViewModel
 @Composable
 fun NoticesScreen(vm: NoticesViewModel = koinViewModel(), navigator: AppNavigator = koinInject()) {
     val s by vm.state.collectAsStateWithLifecycle()
+    var pendingEdit by remember { mutableStateOf<Notice?>(null) }
+    var pendingDelete by remember { mutableStateOf<Notice?>(null) }
     Scaffold(
         topBar = { AppTopBar("Avisos", onBack = { navigator.back() }) },
         floatingActionButton = {
@@ -80,8 +85,8 @@ fun NoticesScreen(vm: NoticesViewModel = koinViewModel(), navigator: AppNavigato
                         NoticeCard(
                             notice = notice,
                             canManage = s.canManage,
-                            onEdit = { vm.showEdit(notice) },
-                            onDelete = { vm.delete(notice) },
+                            onEdit = { pendingEdit = notice },
+                            onDelete = { pendingDelete = notice },
                         )
                     }
                 }
@@ -114,6 +119,40 @@ fun NoticesScreen(vm: NoticesViewModel = koinViewModel(), navigator: AppNavigato
             },
             confirmButton = { TextButton(onClick = vm::save) { Text("Salvar") } },
             dismissButton = { TextButton(onClick = vm::dismissEditor) { Text("Cancelar") } },
+        )
+    }
+
+    pendingEdit?.let { notice ->
+        AlertDialog(
+            onDismissRequest = { pendingEdit = null },
+            title = { Text("Editar aviso?") },
+            text = { Text("Deseja abrir “${notice.title}” para edição?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.showEdit(notice)
+                    pendingEdit = null
+                }) { Text("Editar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingEdit = null }) { Text("Cancelar") }
+            },
+        )
+    }
+
+    pendingDelete?.let { notice ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("Excluir aviso?") },
+            text = { Text("Esta ação não pode ser desfeita. Excluir “${notice.title}”?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.delete(notice)
+                    pendingDelete = null
+                }) { Text("Excluir", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) { Text("Cancelar") }
+            },
         )
     }
 

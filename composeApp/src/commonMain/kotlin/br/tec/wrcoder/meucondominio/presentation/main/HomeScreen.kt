@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import br.tec.wrcoder.meucondominio.domain.model.User
 import br.tec.wrcoder.meucondominio.domain.model.UserRole
+import br.tec.wrcoder.meucondominio.presentation.common.AvatarImage
 import br.tec.wrcoder.meucondominio.presentation.common.StatusPill
 import br.tec.wrcoder.meucondominio.presentation.common.PillTone
 import br.tec.wrcoder.meucondominio.presentation.navigation.Route
@@ -102,7 +103,7 @@ private fun HomeScreenContent(
         Column(
             modifier = Modifier.fillMaxSize().padding(padding),
         ) {
-            user?.let { GreetingCard(name = it.name, role = it.role) }
+            user?.let { GreetingCard(name = it.name, role = it.role, avatarUrl = it.avatarUrl) }
 
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(minSize = 160.dp),
@@ -127,7 +128,7 @@ private fun HomeScreenContent(
 }
 
 @Composable
-private fun GreetingCard(name: String, role: UserRole) {
+private fun GreetingCard(name: String, role: UserRole, avatarUrl: String?) {
     Surface(
         color = MaterialTheme.colorScheme.primaryContainer,
         shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp),
@@ -137,20 +138,14 @@ private fun GreetingCard(name: String, role: UserRole) {
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(48.dp),
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = name.firstOrNull()?.uppercase() ?: "?",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                    )
-                }
-            }
+            AvatarImage(
+                name = name,
+                avatarUrl = avatarUrl,
+                background = MaterialTheme.colorScheme.primary,
+                foreground = MaterialTheme.colorScheme.onPrimary,
+                size = 48.dp,
+                textStyle = MaterialTheme.typography.titleLarge,
+            )
             Spacer(Modifier.size(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(
