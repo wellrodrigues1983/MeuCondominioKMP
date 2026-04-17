@@ -18,10 +18,10 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Apartment
 import androidx.compose.material.icons.filled.Campaign
-import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Deck
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.HowToVote
@@ -45,18 +45,37 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import br.tec.wrcoder.meucondominio.domain.model.User
 import br.tec.wrcoder.meucondominio.domain.model.UserRole
 import br.tec.wrcoder.meucondominio.presentation.common.StatusPill
 import br.tec.wrcoder.meucondominio.presentation.common.PillTone
 import br.tec.wrcoder.meucondominio.presentation.navigation.Route
+import br.tec.wrcoder.meucondominio.presentation.theme.AppTheme
+import kotlinx.datetime.Instant
 import org.koin.compose.viewmodel.koinViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(vm: HomeViewModel = koinViewModel()) {
     val user by vm.user.collectAsStateWithLifecycle()
+    HomeScreenContent(
+        user = user,
+        features = vm.featuresFor(user),
+        onLogout = vm::logout,
+        onFeatureClick = vm::go,
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HomeScreenContent(
+    user: User?,
+    features: List<HomeFeature>,
+    onLogout: () -> Unit,
+    onFeatureClick: (Route) -> Unit,
+) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -68,7 +87,7 @@ fun HomeScreen(vm: HomeViewModel = koinViewModel()) {
                     )
                 },
                 actions = {
-                    IconButton(onClick = vm::logout) {
+                    IconButton(onClick = onLogout) {
                         Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Sair")
                     }
                 },
@@ -92,14 +111,14 @@ fun HomeScreen(vm: HomeViewModel = koinViewModel()) {
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                items(vm.featuresFor(user)) { feature ->
+                items(features) { feature ->
                     val meta = featureMeta(feature.route)
                     FeatureTile(
                         title = feature.title,
                         icon = meta.icon,
                         tintBackground = meta.background(),
                         tintForeground = meta.foreground(),
-                        onClick = { vm.go(feature.route) },
+                        onClick = { onFeatureClick(feature.route) },
                     )
                 }
             }
@@ -174,6 +193,7 @@ private fun FeatureTile(
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Surface(
                 shape = RoundedCornerShape(14.dp),
@@ -241,7 +261,7 @@ private fun featureMeta(route: Route): FeatureMeta = when (route) {
         { MaterialTheme.colorScheme.onSecondaryContainer },
     )
     Route.ChatThreads -> FeatureMeta(
-        Icons.Filled.Chat,
+        Icons.AutoMirrored.Filled.Chat,
         { MaterialTheme.colorScheme.primaryContainer },
         { MaterialTheme.colorScheme.onPrimaryContainer },
     )
@@ -261,4 +281,31 @@ private fun roleLabel(role: UserRole): String = when (role) {
     UserRole.ADMIN -> "Administrador"
     UserRole.SUPERVISOR -> "Supervisor"
     UserRole.RESIDENT -> "Morador"
+}
+
+@Preview
+@Composable
+private fun HomeScreenPreview() {
+    AppTheme {
+        HomeScreenContent(
+            user = User(
+                id = "1",
+                name = "Ana Admin",
+                email = "admin@demo.com",
+                role = UserRole.ADMIN,
+                condominiumId = "condo-123",
+                createdAt = Instant.fromEpochMilliseconds(0),
+            ),
+            features = listOf(
+                HomeFeature("Avisos", Route.Notices),
+                HomeFeature("Encomendas", Route.Packages),
+                HomeFeature("Espaços", Route.Spaces),
+                HomeFeature("Anúncios", Route.Marketplace),
+                HomeFeature("Mudanças", Route.Moving),
+                HomeFeature("Arquivos", Route.Files),
+            ),
+            onLogout = {},
+            onFeatureClick = {},
+        )
+    }
 }
