@@ -9,6 +9,7 @@ import br.tec.wrcoder.meucondominio.domain.model.FileDoc
 import br.tec.wrcoder.meucondominio.domain.model.Listing
 import br.tec.wrcoder.meucondominio.domain.model.MovingRequest
 import br.tec.wrcoder.meucondominio.domain.model.Notice
+import br.tec.wrcoder.meucondominio.domain.model.PackageDescription
 import br.tec.wrcoder.meucondominio.domain.model.PackageItem
 import br.tec.wrcoder.meucondominio.domain.model.Poll
 import br.tec.wrcoder.meucondominio.domain.model.PollVote
@@ -25,6 +26,7 @@ class InMemoryStore {
 
     val notices = MutableStateFlow<List<Notice>>(emptyList())
     val packages = MutableStateFlow<List<PackageItem>>(emptyList())
+    val packageDescriptions = MutableStateFlow<List<PackageDescription>>(emptyList())
     val spaces = MutableStateFlow<List<CommonSpace>>(emptyList())
     val reservations = MutableStateFlow<List<Reservation>>(emptyList())
     val listings = MutableStateFlow<List<Listing>>(emptyList())

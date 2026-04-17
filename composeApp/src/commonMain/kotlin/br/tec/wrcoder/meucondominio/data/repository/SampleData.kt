@@ -8,6 +8,7 @@ import br.tec.wrcoder.meucondominio.domain.model.CommonSpace
 import br.tec.wrcoder.meucondominio.domain.model.Condominium
 import br.tec.wrcoder.meucondominio.domain.model.CondoUnit
 import br.tec.wrcoder.meucondominio.domain.model.Notice
+import br.tec.wrcoder.meucondominio.domain.model.PackageDescription
 import br.tec.wrcoder.meucondominio.domain.model.Poll
 import br.tec.wrcoder.meucondominio.domain.model.PollOption
 import br.tec.wrcoder.meucondominio.domain.model.PollStatus
@@ -27,7 +28,7 @@ object SampleDataSeeder {
             code = "DEMO1234",
             createdAt = now,
         )
-        val units = listOf("101", "102", "201", "202").map {
+        val blockAUnits = listOf("101", "102", "201", "202").map {
             CondoUnit(
                 id = newId(),
                 condominiumId = condo.id,
@@ -35,6 +36,15 @@ object SampleDataSeeder {
                 block = "A",
             )
         }
+        val blockBUnits = listOf("301", "302", "303").map {
+            CondoUnit(
+                id = newId(),
+                condominiumId = condo.id,
+                identifier = it,
+                block = "B",
+            )
+        }
+        val units = blockAUnits + blockBUnits
         val admin = User(
             id = newId(),
             name = "Ana Admin",
@@ -62,7 +72,7 @@ object SampleDataSeeder {
             phone = null,
             role = UserRole.RESIDENT,
             condominiumId = condo.id,
-            unitId = units.first().id,
+            unitId = blockAUnits.first().id,
             createdAt = now,
         )
 
@@ -72,6 +82,14 @@ object SampleDataSeeder {
         store.passwords["admin@demo.com"] = "123456"
         store.passwords["supervisor@demo.com"] = "123456"
         store.passwords["morador@demo.com"] = "123456"
+
+        store.packageDescriptions.value = listOf("Caixa", "Envelope", "Sacola").map {
+            PackageDescription(
+                id = newId(),
+                condominiumId = condo.id,
+                text = it,
+            )
+        }
 
         store.notices.value = listOf(
             Notice(

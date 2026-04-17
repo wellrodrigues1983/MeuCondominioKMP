@@ -1,6 +1,5 @@
 package br.tec.wrcoder.meucondominio.presentation.features.packages
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,11 +20,15 @@ import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -52,6 +55,7 @@ import br.tec.wrcoder.meucondominio.presentation.navigation.AppNavigator
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PackagesScreen(vm: PackagesViewModel = koinViewModel(), navigator: AppNavigator = koinInject()) {
     val s by vm.state.collectAsStateWithLifecycle()
@@ -89,41 +93,111 @@ fun PackagesScreen(vm: PackagesViewModel = koinViewModel(), navigator: AppNaviga
     }
 
     if (s.editor.visible) {
-        var expanded by remember { mutableStateOf(false) }
-        val selectedUnitLabel = s.units.firstOrNull { it.id == s.editor.unitId }?.identifier.orEmpty()
+        var unitExpanded by remember { mutableStateOf(false) }
+        var descExpanded by remember { mutableStateOf(false) }
+        val selectedUnitLabel = s.units.firstOrNull { it.id == s.editor.unitId }
+            ?.let { u -> u.block?.let { "$it-${u.identifier}" } ?: u.identifier }
+            .orEmpty()
         AlertDialog(
             onDismissRequest = vm::dismiss,
             title = { Text("Registrar encomenda") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box {
+                    ExposedDropdownMenuBox(
+                        expanded = unitExpanded,
+                        onExpandedChange = { unitExpanded = it },
+                    ) {
                         OutlinedTextField(
                             value = selectedUnitLabel,
                             onValueChange = {},
                             readOnly = true,
                             label = { Text("Unidade") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = unitExpanded) },
                             shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth().clickable { expanded = true },
+                            modifier = Modifier
+                                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                                .fillMaxWidth(),
                         )
-                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        ExposedDropdownMenu(
+                            expanded = unitExpanded,
+                            onDismissRequest = { unitExpanded = false },
+                        ) {
                             s.units.forEach { unit ->
+                                val label = unit.block?.let { "$it-${unit.identifier}" } ?: unit.identifier
                                 DropdownMenuItem(
-                                    text = { Text(unit.identifier) },
+                                    text = { Text(label) },
                                     onClick = {
                                         vm.onUnit(unit.id)
-                                        expanded = false
+                                        unitExpanded = false
                                     },
                                 )
                             }
                         }
                     }
-                    OutlinedTextField(
-                        s.editor.description,
-                        vm::onDescription,
-                        label = { Text("Descrição") },
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                    ExposedDropdownMenuBox(
+                        expanded = descExpanded,
+                        onExpandedChange = { descExpanded = it },
+                    ) {
+                        OutlinedTextField(
+                            value = s.editor.description,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Descrição") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = descExpanded) },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                                .fillMaxWidth(),
+                        )
+                        ExposedDropdownMenu(
+                            expanded = descExpanded,
+                            onDismissRequest = { descExpanded = false },
+                        ) {
+                            s.descriptions.forEach { d ->
+                                DropdownMenuItem(
+                                    text = { Text(d.text) },
+                                    onClick = {
+                                        vm.onDescription(d.text)
+                                        descExpanded = false
+                                    },
+                                )
+                            }
+                            if (s.descriptions.isNotEmpty()) HorizontalDivider()
+                            DropdownMenuItem(
+                                text = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Filled.Add,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                        Spacer(Modifier.size(8.dp))
+                                        Text("Nova descrição…")
+                                    }
+                                },
+                                onClick = {
+                                    vm.startCreateDescription()
+                                    descExpanded = false
+                                },
+                            )
+                        }
+                    }
+                    if (s.editor.creatingDescription) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            OutlinedTextField(
+                                s.editor.newDescriptionText,
+                                vm::onNewDescriptionText,
+                                label = { Text("Nova descrição") },
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.weight(1f),
+                            )
+                            Spacer(Modifier.size(8.dp))
+                            TextButton(onClick = vm::confirmCreateDescription) { Text("Adicionar") }
+                        }
+                    }
                     OutlinedTextField(
                         s.editor.carrier,
                         vm::onCarrier,
