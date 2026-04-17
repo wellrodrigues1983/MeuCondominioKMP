@@ -1,32 +1,51 @@
 package br.tec.wrcoder.meucondominio.presentation.features.profile
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import br.tec.wrcoder.meucondominio.domain.model.UserRole
 import br.tec.wrcoder.meucondominio.presentation.common.AppTopBar
+import br.tec.wrcoder.meucondominio.presentation.common.PillTone
+import br.tec.wrcoder.meucondominio.presentation.common.SectionHeader
+import br.tec.wrcoder.meucondominio.presentation.common.StatusPill
 import br.tec.wrcoder.meucondominio.presentation.navigation.AppNavigator
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
@@ -38,32 +57,121 @@ fun ProfileScreen(vm: ProfileViewModel = koinViewModel(), navigator: AppNavigato
         topBar = { AppTopBar("Perfil", onBack = { navigator.back() }) },
         floatingActionButton = {
             if (s.canManageMembers) {
-                ExtendedFloatingActionButton(onClick = vm::showAddMember) { Text("+ Adicionar membro") }
+                ExtendedFloatingActionButton(
+                    onClick = vm::showAddMember,
+                    icon = { Icon(Icons.Filled.PersonAdd, contentDescription = null) },
+                    text = { Text("Adicionar membro") },
+                )
             }
         },
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
-            s.user?.let {
-                Text(it.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text(it.email, style = MaterialTheme.typography.bodyMedium)
-                Text("Perfil: ${it.role.name}", style = MaterialTheme.typography.labelLarge)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            s.user?.let { user ->
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(72.dp),
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(
+                                        user.name.firstOrNull()?.uppercase() ?: "?",
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimary,
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                user.name,
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                            Text(
+                                user.email,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            StatusPill(
+                                text = roleLabel(user.role),
+                                tone = when (user.role) {
+                                    UserRole.ADMIN -> PillTone.Warning
+                                    UserRole.SUPERVISOR -> PillTone.Info
+                                    UserRole.RESIDENT -> PillTone.Success
+                                },
+                            )
+                        }
+                    }
+                }
+
                 s.unit?.let { u ->
-                    Text("Unidade: ${u.identifier}${u.block?.let { b -> " · bloco $b" } ?: ""}")
+                    item {
+                        InfoRow(
+                            icon = Icons.Filled.Home,
+                            label = "Unidade",
+                            value = "${u.identifier}${u.block?.let { b -> " · bloco $b" } ?: ""}",
+                        )
+                    }
                 }
             }
-            Spacer(Modifier.height(16.dp))
+
             if (s.canManageMembers) {
-                Text("Membros da unidade", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                LazyColumn(
-                    contentPadding = PaddingValues(vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    items(s.members, key = { it.id }) { member ->
-                        Card(Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(1.dp)) {
-                            Column(Modifier.padding(12.dp)) {
-                                Text(member.name, fontWeight = FontWeight.SemiBold)
-                                Text(member.email, style = MaterialTheme.typography.labelSmall)
+                item {
+                    Spacer(Modifier.height(8.dp))
+                    SectionHeader("Membros da unidade")
+                }
+                items(s.members, key = { it.id }) { member ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    ) {
+                        Row(
+                            Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                modifier = Modifier.size(40.dp),
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(
+                                        member.name.firstOrNull()?.uppercase() ?: "?",
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.size(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    member.name,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Text(
+                                    member.email,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                         }
                     }
@@ -78,15 +186,35 @@ fun ProfileScreen(vm: ProfileViewModel = koinViewModel(), navigator: AppNavigato
             title = { Text("Adicionar membro da unidade") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(s.editor.name, { v -> vm.updateEditor { copy(name = v) } }, label = { Text("Nome") })
-                    OutlinedTextField(s.editor.email, { v -> vm.updateEditor { copy(email = v) } }, label = { Text("E-mail") })
+                    OutlinedTextField(
+                        s.editor.name,
+                        { v -> vm.updateEditor { copy(name = v) } },
+                        label = { Text("Nome") },
+                        leadingIcon = { Icon(Icons.Filled.Person, contentDescription = null) },
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                    OutlinedTextField(
+                        s.editor.email,
+                        { v -> vm.updateEditor { copy(email = v) } },
+                        label = { Text("E-mail") },
+                        leadingIcon = { Icon(Icons.Filled.Email, contentDescription = null) },
+                        shape = RoundedCornerShape(12.dp),
+                    )
                     OutlinedTextField(
                         s.editor.password,
                         { v -> vm.updateEditor { copy(password = v) } },
                         label = { Text("Senha") },
+                        leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null) },
                         visualTransformation = PasswordVisualTransformation(),
+                        shape = RoundedCornerShape(12.dp),
                     )
-                    OutlinedTextField(s.editor.phone, { v -> vm.updateEditor { copy(phone = v) } }, label = { Text("Telefone (opcional)") })
+                    OutlinedTextField(
+                        s.editor.phone,
+                        { v -> vm.updateEditor { copy(phone = v) } },
+                        label = { Text("Telefone (opcional)") },
+                        leadingIcon = { Icon(Icons.Filled.Phone, contentDescription = null) },
+                        shape = RoundedCornerShape(12.dp),
+                    )
                 }
             },
             confirmButton = { TextButton(onClick = vm::save) { Text("Criar") } },
@@ -102,4 +230,43 @@ fun ProfileScreen(vm: ProfileViewModel = koinViewModel(), navigator: AppNavigato
             text = { Text(it) },
         )
     }
+}
+
+@Composable
+private fun InfoRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, value: String) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.size(12.dp))
+            Column {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    value,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+    }
+}
+
+private fun roleLabel(role: UserRole): String = when (role) {
+    UserRole.ADMIN -> "Administrador"
+    UserRole.SUPERVISOR -> "Supervisor"
+    UserRole.RESIDENT -> "Morador"
 }
