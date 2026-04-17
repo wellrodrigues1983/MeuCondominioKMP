@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import br.tec.wrcoder.meucondominio.core.formatBr
 import br.tec.wrcoder.meucondominio.core.toLocalDateTime
 import br.tec.wrcoder.meucondominio.domain.model.Notice
 import br.tec.wrcoder.meucondominio.presentation.common.AppTopBar
@@ -161,7 +162,7 @@ private fun NoticeCard(notice: Notice, canManage: Boolean, onEdit: () -> Unit, o
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        "${notice.authorName} · ${notice.createdAt.toLocalDateTime().date}",
+                        "${notice.authorName} · ${notice.createdAt.toLocalDateTime().date.formatBr()}",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f),

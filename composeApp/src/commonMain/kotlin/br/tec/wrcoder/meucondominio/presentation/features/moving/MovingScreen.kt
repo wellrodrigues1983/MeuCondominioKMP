@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import br.tec.wrcoder.meucondominio.core.formatBr
 import br.tec.wrcoder.meucondominio.domain.model.MovingRequest
 import br.tec.wrcoder.meucondominio.domain.model.MovingStatus
 import br.tec.wrcoder.meucondominio.presentation.common.AppTopBar
@@ -186,7 +187,7 @@ private fun MovingCard(
                     StatusPill(text = statusLabel, tone = statusTone)
                 }
                 Text(
-                    "Agendada para ${item.scheduledFor}",
+                    "Agendada para ${item.scheduledFor.formatBr()}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

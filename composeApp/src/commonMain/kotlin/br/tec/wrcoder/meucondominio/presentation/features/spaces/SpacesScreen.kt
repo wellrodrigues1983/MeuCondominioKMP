@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import br.tec.wrcoder.meucondominio.core.formatBr
 import br.tec.wrcoder.meucondominio.domain.model.CommonSpace
 import br.tec.wrcoder.meucondominio.domain.model.Reservation
 import br.tec.wrcoder.meucondominio.domain.model.ReservationStatus
@@ -204,7 +205,7 @@ private fun ReservationCard(reservation: Reservation, onCancel: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    "${reservation.spaceName} · ${reservation.date}",
+                    "${reservation.spaceName} · ${reservation.date.formatBr()}",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),

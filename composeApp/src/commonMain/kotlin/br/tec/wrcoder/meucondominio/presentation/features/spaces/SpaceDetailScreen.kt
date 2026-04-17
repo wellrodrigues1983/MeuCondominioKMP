@@ -6,24 +6,22 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Deck
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,18 +33,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import br.tec.wrcoder.meucondominio.core.AppClock
+import br.tec.wrcoder.meucondominio.core.formatBr
+import br.tec.wrcoder.meucondominio.core.toLocalDate
 import br.tec.wrcoder.meucondominio.domain.model.Reservation
 import br.tec.wrcoder.meucondominio.domain.model.ReservationStatus
 import br.tec.wrcoder.meucondominio.domain.repository.SpaceRepository
 import br.tec.wrcoder.meucondominio.presentation.common.AppTopBar
 import br.tec.wrcoder.meucondominio.presentation.common.IconBadge
-import br.tec.wrcoder.meucondominio.presentation.common.PillTone
 import br.tec.wrcoder.meucondominio.presentation.common.SectionHeader
-import br.tec.wrcoder.meucondominio.presentation.common.StatusPill
 import br.tec.wrcoder.meucondominio.presentation.navigation.AppNavigator
 import kotlinx.datetime.LocalDate
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
+
+private const val MONTHS_TO_SHOW = 6
 
 @Composable
 fun SpaceDetailScreen(
@@ -54,6 +55,7 @@ fun SpaceDetailScreen(
     spacesViewModel: SpacesViewModel = koinViewModel(),
     spaceRepository: SpaceRepository = koinInject(),
     navigator: AppNavigator = koinInject(),
+    clock: AppClock = koinInject(),
 ) {
     val uiState by spacesViewModel.state.collectAsStateWithLifecycle()
     val space = uiState.spaces.firstOrNull { it.id == spaceId }
@@ -63,10 +65,24 @@ fun SpaceDetailScreen(
         spaceRepository.observeReservations(spaceId).collect { reservations = it }
     }
 
-    var pickedDate by remember { mutableStateOf("") }
+    val today = remember(clock) { clock.now().toLocalDate(clock.timeZone()) }
+    var selectedDate by remember(spaceId) { mutableStateOf<LocalDate?>(null) }
+    var tappedReservation by remember(spaceId) { mutableStateOf<Reservation?>(null) }
+
+    val reservationsByDate = remember(reservations) {
+        reservations
+            .filter { it.status == ReservationStatus.CONFIRMED }
+            .associateBy { it.date }
+    }
 
     Scaffold(topBar = { AppTopBar(space?.name ?: "Espaço", onBack = { navigator.back() }) }) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+        ) {
             if (space != null) {
                 Surface(
                     shape = RoundedCornerShape(18.dp),
@@ -122,68 +138,78 @@ fun SpaceDetailScreen(
 
                 Spacer(Modifier.size(20.dp))
                 SectionHeader("Nova reserva")
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = pickedDate,
-                        onValueChange = { pickedDate = it },
-                        label = { Text("Data (AAAA-MM-DD)") },
-                        leadingIcon = { Icon(Icons.Filled.CalendarMonth, contentDescription = null) },
-                        shape = RoundedCornerShape(12.dp),
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(
+                        Icons.Filled.CalendarMonth,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
                     )
                     Spacer(Modifier.size(8.dp))
+                    Text(
+                        selectedDate?.let { "Data selecionada: ${it.formatBr()}" }
+                            ?: "Toque em uma data disponível no calendário",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
                     Button(
                         onClick = {
-                            val date = runCatching { LocalDate.parse(pickedDate) }.getOrNull()
-                            if (date != null) spacesViewModel.reserve(space, date)
+                            selectedDate?.let { date ->
+                                spacesViewModel.reserve(space, date)
+                                selectedDate = null
+                            }
                         },
+                        enabled = selectedDate != null,
                         shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.height(56.dp),
                     ) { Text("Reservar") }
                 }
 
                 Spacer(Modifier.size(20.dp))
                 SectionHeader("Disponibilidade")
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    items(
-                        reservations.filter { it.status == ReservationStatus.CONFIRMED },
-                        key = { it.id },
-                    ) { r ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(14.dp),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        ) {
-                            Row(
-                                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.Filled.CalendarMonth,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    Spacer(Modifier.size(6.dp))
-                                    Text(
-                                        r.date.toString(),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                    )
-                                }
-                                StatusPill(text = "Unidade ${r.unitIdentifier}", tone = PillTone.Info)
-                            }
-                        }
-                    }
-                }
+                CalendarLegend()
+                Spacer(Modifier.size(12.dp))
+                AvailabilityCalendar(
+                    today = today,
+                    monthCount = MONTHS_TO_SHOW,
+                    reservationsByDate = reservationsByDate,
+                    selectedDate = selectedDate,
+                    onSelectAvailable = { selectedDate = it },
+                    onClickReserved = { tappedReservation = it },
+                )
             }
         }
+    }
+
+    tappedReservation?.let { r ->
+        AlertDialog(
+            onDismissRequest = { tappedReservation = null },
+            title = { Text("Data reservada") },
+            text = {
+                Column {
+                    Text(
+                        r.date.formatBr(),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Spacer(Modifier.size(8.dp))
+                    Text(
+                        "Unidade ${r.unitIdentifier}",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    if (r.residentName.isNotBlank()) {
+                        Text(
+                            "Morador: ${r.residentName}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { tappedReservation = null }) { Text("OK") }
+            },
+        )
     }
 }

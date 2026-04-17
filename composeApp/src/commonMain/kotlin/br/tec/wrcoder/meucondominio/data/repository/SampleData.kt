@@ -12,9 +12,13 @@ import br.tec.wrcoder.meucondominio.domain.model.PackageDescription
 import br.tec.wrcoder.meucondominio.domain.model.Poll
 import br.tec.wrcoder.meucondominio.domain.model.PollOption
 import br.tec.wrcoder.meucondominio.domain.model.PollStatus
+import br.tec.wrcoder.meucondominio.domain.model.Reservation
+import br.tec.wrcoder.meucondominio.domain.model.ReservationStatus
 import br.tec.wrcoder.meucondominio.domain.model.User
 import br.tec.wrcoder.meucondominio.domain.model.UserRole
 import kotlin.time.Duration.Companion.days
+import kotlinx.datetime.DatePeriod
+import kotlinx.datetime.plus
 
 object SampleDataSeeder {
     fun seed(store: InMemoryStore, clock: AppClock) {
@@ -103,23 +107,42 @@ object SampleDataSeeder {
             )
         )
 
-        store.spaces.value = listOf(
-            CommonSpace(
+        val salao = CommonSpace(
+            id = newId(),
+            condominiumId = condo.id,
+            name = "Salão de Festas",
+            description = "Capacidade para 40 pessoas, inclui cozinha e mobiliário.",
+            price = 250.0,
+            imageUrls = emptyList(),
+        )
+        val churrasqueira = CommonSpace(
+            id = newId(),
+            condominiumId = condo.id,
+            name = "Churrasqueira",
+            description = "Área externa com churrasqueira e mesas.",
+            price = 120.0,
+            imageUrls = emptyList(),
+        )
+        store.spaces.value = listOf(salao, churrasqueira)
+
+        val today = now.toLocalDate(clock.timeZone())
+        fun seedReservation(space: CommonSpace, unit: CondoUnit, daysAhead: Int, residentName: String) =
+            Reservation(
                 id = newId(),
-                condominiumId = condo.id,
-                name = "Salão de Festas",
-                description = "Capacidade para 40 pessoas, inclui cozinha e mobiliário.",
-                price = 250.0,
-                imageUrls = emptyList(),
-            ),
-            CommonSpace(
-                id = newId(),
-                condominiumId = condo.id,
-                name = "Churrasqueira",
-                description = "Área externa com churrasqueira e mesas.",
-                price = 120.0,
-                imageUrls = emptyList(),
-            ),
+                spaceId = space.id,
+                spaceName = space.name,
+                unitId = unit.id,
+                unitIdentifier = unit.identifier,
+                residentUserId = resident.id,
+                residentName = residentName,
+                date = today.plus(DatePeriod(days = daysAhead)),
+                status = ReservationStatus.CONFIRMED,
+                createdAt = now,
+            )
+        store.reservations.value = listOf(
+            seedReservation(salao, blockAUnits[1], 7, "Morador 102"),
+            seedReservation(salao, blockAUnits[2], 21, "Morador 201"),
+            seedReservation(churrasqueira, blockBUnits[0], 14, "Morador 301"),
         )
 
         store.polls.value = listOf(

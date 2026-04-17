@@ -43,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import br.tec.wrcoder.meucondominio.core.formatBr
 import br.tec.wrcoder.meucondominio.core.toLocalDateTime
 import br.tec.wrcoder.meucondominio.domain.model.PackageItem
 import br.tec.wrcoder.meucondominio.domain.model.PackageStatus
@@ -268,7 +269,7 @@ private fun PackageCard(item: PackageItem, canRegister: Boolean, onMarkPicked: (
                     )
                 }
                 Text(
-                    "Recebida em ${item.receivedAt.toLocalDateTime().date}",
+                    "Recebida em ${item.receivedAt.toLocalDateTime().date.formatBr()}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
