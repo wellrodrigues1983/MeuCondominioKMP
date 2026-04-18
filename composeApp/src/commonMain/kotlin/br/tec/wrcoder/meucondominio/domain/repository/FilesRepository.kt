@@ -16,4 +16,5 @@ interface FilesRepository {
         bytes: ByteArray,
     ): AppResult<FileDoc>
     suspend fun delete(id: String): AppResult<Unit>
+    suspend fun downloadBytes(file: FileDoc): AppResult<ByteArray>
 }

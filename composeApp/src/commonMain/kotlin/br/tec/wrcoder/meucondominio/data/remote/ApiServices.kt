@@ -1,12 +1,12 @@
 package br.tec.wrcoder.meucondominio.data.remote
 
 import br.tec.wrcoder.meucondominio.data.remote.dto.AuthSessionDto
+import br.tec.wrcoder.meucondominio.data.remote.dto.CancelReservationRequestDto
 import br.tec.wrcoder.meucondominio.data.remote.dto.ChatMessageDto
 import br.tec.wrcoder.meucondominio.data.remote.dto.ChatThreadDto
 import br.tec.wrcoder.meucondominio.data.remote.dto.CommonSpaceDto
 import br.tec.wrcoder.meucondominio.data.remote.dto.CondoUnitDto
 import br.tec.wrcoder.meucondominio.data.remote.dto.CondominiumDto
-import br.tec.wrcoder.meucondominio.data.remote.dto.CancelReservationRequestDto
 import br.tec.wrcoder.meucondominio.data.remote.dto.CreateChatThreadRequestDto
 import br.tec.wrcoder.meucondominio.data.remote.dto.CreateListingRequestDto
 import br.tec.wrcoder.meucondominio.data.remote.dto.CreateMemberRequestDto
@@ -26,8 +26,8 @@ import br.tec.wrcoder.meucondominio.data.remote.dto.LoginRequestDto
 import br.tec.wrcoder.meucondominio.data.remote.dto.MovingDto
 import br.tec.wrcoder.meucondominio.data.remote.dto.NoticeDto
 import br.tec.wrcoder.meucondominio.data.remote.dto.PackageDescriptionDto
-import br.tec.wrcoder.meucondominio.data.remote.dto.PageDto
 import br.tec.wrcoder.meucondominio.data.remote.dto.PackageItemDto
+import br.tec.wrcoder.meucondominio.data.remote.dto.PageDto
 import br.tec.wrcoder.meucondominio.data.remote.dto.PollDto
 import br.tec.wrcoder.meucondominio.data.remote.dto.PollResultsDto
 import br.tec.wrcoder.meucondominio.data.remote.dto.RegisterCondominiumRequestDto
@@ -187,6 +187,8 @@ class FilesApiService(private val http: HttpClient) {
         )
     }.body()
     suspend fun delete(id: String) { http.delete("files/$id") }
+    suspend fun download(fileUrl: String): ByteArray =
+        http.get(fileUrl.trimStart('/')).body()
 }
 
 class PollsApiService(private val http: HttpClient) {

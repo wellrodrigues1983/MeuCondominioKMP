@@ -3,7 +3,9 @@ package br.tec.wrcoder.meucondominio.di
 import br.tec.wrcoder.meucondominio.core.AppClock
 import br.tec.wrcoder.meucondominio.core.BinaryStore
 import br.tec.wrcoder.meucondominio.core.BuildConfig
+import br.tec.wrcoder.meucondominio.core.FileOpener
 import br.tec.wrcoder.meucondominio.core.SystemAppClock
+import br.tec.wrcoder.meucondominio.core.createFileOpener
 import br.tec.wrcoder.meucondominio.core.network.NetworkMonitor
 import br.tec.wrcoder.meucondominio.core.network.createNetworkMonitor
 import br.tec.wrcoder.meucondominio.core.storage.SecureStorage
@@ -91,6 +93,7 @@ fun commonModule(): Module = module {
     single<SecureStorage> { createSecureStorage() }
     single { TokenStore(get()) }
     single { BinaryStore() }
+    single<FileOpener> { createFileOpener() }
     single { ApiJson }
 
     single<NetworkMonitor> { createNetworkMonitor() }

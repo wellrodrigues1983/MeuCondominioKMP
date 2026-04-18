@@ -3,6 +3,7 @@ package br.tec.wrcoder.meucondominio.presentation.features.files
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import br.tec.wrcoder.meucondominio.core.AppResult
+import br.tec.wrcoder.meucondominio.core.FileOpener
 import br.tec.wrcoder.meucondominio.domain.model.Action
 import br.tec.wrcoder.meucondominio.domain.model.FileDoc
 import br.tec.wrcoder.meucondominio.domain.model.Permissions
@@ -33,29 +34,34 @@ data class FilesUiState(
     val canManage: Boolean = false,
     val editor: FileEditor = FileEditor(),
     val error: String? = null,
+    val openingFileId: String? = null,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class FilesViewModel(
     private val files: FilesRepository,
     private val auth: AuthRepository,
+    private val fileOpener: FileOpener,
 ) : ViewModel() {
 
     private val user = auth.session.map { it?.user }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
     private val _editor = MutableStateFlow(FileEditor())
     private val _error = MutableStateFlow<String?>(null)
+    private val _openingFileId = MutableStateFlow<String?>(null)
 
     val state = combine(
         user.flatMapLatest { u -> if (u == null) flowOf(emptyList()) else files.observe(u.condominiumId) },
         user,
         _editor,
         _error,
-    ) { list, u, editor, error ->
+        _openingFileId,
+    ) { list, u, editor, error, opening ->
         FilesUiState(
             files = list,
             canManage = u != null && Permissions.canPerform(u.role, Action.FILE_MANAGE),
             editor = editor,
             error = error,
+            openingFileId = opening,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, FilesUiState())
 
@@ -90,6 +96,26 @@ class FilesViewModel(
 
     fun delete(file: FileDoc) {
         viewModelScope.launch { files.delete(file.id) }
+    }
+
+    fun open(file: FileDoc) {
+        if (_openingFileId.value != null) return
+        _openingFileId.value = file.id
+        viewModelScope.launch {
+            try {
+                when (val r = files.downloadBytes(file)) {
+                    is AppResult.Success -> {
+                        val fileName = file.title.ifBlank { "documento" }
+                        val opened = fileOpener.openPdf(r.data, fileName)
+                        if (!opened) _error.value = "Nenhum aplicativo disponível para abrir PDF"
+                    }
+
+                    is AppResult.Failure -> _error.value = r.error.message
+                }
+            } finally {
+                _openingFileId.value = null
+            }
+        }
     }
 
     fun clearError() { _error.value = null }

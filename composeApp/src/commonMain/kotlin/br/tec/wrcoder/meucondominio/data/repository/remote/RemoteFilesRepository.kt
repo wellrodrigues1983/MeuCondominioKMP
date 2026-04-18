@@ -51,6 +51,13 @@ class RemoteFilesRepository(
         }
     }
 
+    override suspend fun downloadBytes(file: FileDoc): AppResult<ByteArray> {
+        if (!network.isOnline.value) {
+            return AppResult.Failure(AppError.Network("Conecte à internet para abrir o arquivo."))
+        }
+        return runRemote { api.download(file.fileUrl) }
+    }
+
     override suspend fun delete(id: String): AppResult<Unit> {
         db.fileDocQueries.upsert(
             id = id, condominiumId = "", title = "", description = null, fileUrl = "",

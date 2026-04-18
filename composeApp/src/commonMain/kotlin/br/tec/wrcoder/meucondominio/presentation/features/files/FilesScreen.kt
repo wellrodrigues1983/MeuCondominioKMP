@@ -1,5 +1,6 @@
 package br.tec.wrcoder.meucondominio.presentation.features.files
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +23,7 @@ import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -97,7 +99,13 @@ fun FilesScreen(vm: FilesViewModel = koinViewModel(), navigator: AppNavigator = 
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     items(s.files, key = { it.id }) { file ->
-                        FileCard(file, canManage = s.canManage, onDelete = { pendingDelete = file })
+                        FileCard(
+                            file = file,
+                            canManage = s.canManage,
+                            isOpening = s.openingFileId == file.id,
+                            onOpen = { vm.open(file) },
+                            onDelete = { pendingDelete = file },
+                        )
                     }
                 }
             }
@@ -186,9 +194,15 @@ private fun formatBytes(bytes: Long): String {
 }
 
 @Composable
-private fun FileCard(file: FileDoc, canManage: Boolean, onDelete: () -> Unit) {
+private fun FileCard(
+    file: FileDoc,
+    canManage: Boolean,
+    isOpening: Boolean,
+    onOpen: () -> Unit,
+    onDelete: () -> Unit,
+) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clickable(enabled = !isOpening, onClick = onOpen),
         shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
@@ -221,6 +235,12 @@ private fun FileCard(file: FileDoc, canManage: Boolean, onDelete: () -> Unit) {
                     formatBytes(file.sizeBytes),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (isOpening) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    strokeWidth = 2.dp,
                 )
             }
             if (canManage) {

@@ -54,4 +54,10 @@ class FakeFilesRepository(
         store.files.value = store.files.value.filterNot { it.id == id }
         return Unit.asSuccess()
     }
+
+    override suspend fun downloadBytes(file: FileDoc): AppResult<ByteArray> {
+        val bytes = binaryStore.get(file.fileUrl)
+            ?: return AppError.NotFound("Arquivo indisponível").asFailure()
+        return bytes.asSuccess()
+    }
 }
