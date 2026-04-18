@@ -39,6 +39,7 @@ private data class RefreshRequest(val refreshToken: String)
 private data class RefreshResponse(val accessToken: String, val refreshToken: String)
 
 fun createHttpClient(tokenStore: TokenStore): HttpClient = httpEngineClient {
+    expectSuccess = true
     install(ContentNegotiation) {
         json(ApiJson)
     }

@@ -99,9 +99,14 @@ data class PageDto<T>(
 
 @Serializable
 data class ErrorDto(
-    val code: String,
-    val message: String,
-    val details: Map<String, String> = emptyMap(),
+    val code: String = "",
+    val message: String = "",
+    val details: ErrorDetailsDto? = null,
+)
+
+@Serializable
+data class ErrorDetailsDto(
+    val fields: Map<String, String> = emptyMap(),
 )
 
 @Serializable
