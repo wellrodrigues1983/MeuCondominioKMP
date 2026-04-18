@@ -26,5 +26,8 @@ SELECT * FROM notice_entity WHERE id = ?;
 softDelete:
 UPDATE notice_entity SET deleted = 1, updatedAt = ? WHERE id = ?;
 
+deleteById:
+DELETE FROM notice_entity WHERE id = ?;
+
 lastUpdatedAt:
 SELECT MAX(updatedAt) FROM notice_entity WHERE condominiumId = ?;

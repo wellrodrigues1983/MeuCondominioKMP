@@ -58,6 +58,7 @@ class RemoteNoticesRepository(
         dispatcher.register(Entities.NOTICE, Ops.CREATE) { payload, _ ->
             val p = json.decodeFromString(CreateNoticePayload.serializer(), payload)
             val dto = api.create(p.condominiumId, CreateNoticeRequestDto(p.title, p.description))
+            if (dto.id != p.id) db.noticeQueries.deleteById(p.id)
             persist(dto)
         }
         dispatcher.register(Entities.NOTICE, Ops.UPDATE) { payload, _ ->
