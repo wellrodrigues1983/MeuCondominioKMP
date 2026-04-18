@@ -26,3 +26,12 @@ SELECT * FROM file_entity WHERE id = ?;
 
 lastUpdatedAt:
 SELECT MAX(updatedAt) FROM file_entity WHERE condominiumId = ?;
+
+clear:
+DELETE FROM file_entity;
+
+deleteById:
+DELETE FROM file_entity WHERE id = ?;
+
+idsByCondominium:
+SELECT id FROM file_entity WHERE condominiumId = ?;

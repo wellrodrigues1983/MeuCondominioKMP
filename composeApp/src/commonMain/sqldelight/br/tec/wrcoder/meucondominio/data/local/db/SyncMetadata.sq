@@ -8,3 +8,6 @@ INSERT OR REPLACE INTO sync_cursor(key, updatedSince) VALUES (?, ?);
 
 getCursor:
 SELECT updatedSince FROM sync_cursor WHERE key = ?;
+
+clear:
+DELETE FROM sync_cursor;

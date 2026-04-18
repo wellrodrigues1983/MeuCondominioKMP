@@ -1,6 +1,5 @@
 package br.tec.wrcoder.meucondominio.data.repository.remote
 
-import br.tec.wrcoder.meucondominio.core.AppError
 import br.tec.wrcoder.meucondominio.core.AppResult
 import br.tec.wrcoder.meucondominio.core.storage.AuthTokens
 import br.tec.wrcoder.meucondominio.core.storage.TokenStore
@@ -22,6 +21,9 @@ import br.tec.wrcoder.meucondominio.domain.model.LoginCredentials
 import br.tec.wrcoder.meucondominio.domain.model.RegisterCondominiumInput
 import br.tec.wrcoder.meucondominio.domain.model.User
 import br.tec.wrcoder.meucondominio.domain.repository.AuthRepository
+import io.ktor.client.HttpClient
+import io.ktor.client.plugins.auth.authProviders
+import io.ktor.client.plugins.auth.providers.BearerAuthProvider
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,6 +33,7 @@ class RemoteAuthRepository(
     private val api: AuthApiService,
     private val tokens: TokenStore,
     private val db: MeuCondominioDb,
+    private val httpClient: HttpClient,
 ) : AuthRepository {
 
     private val _session = MutableStateFlow(restoreSession())
@@ -61,8 +64,34 @@ class RemoteAuthRepository(
 
     override suspend fun logout() {
         runCatching { api.logout() }
+        clearLocalCache()
         tokens.clear()
+        httpClient.authProviders
+            .filterIsInstance<BearerAuthProvider>()
+            .forEach { it.clearToken() }
         _session.value = null
+    }
+
+    private fun clearLocalCache() {
+        db.transaction {
+            db.noticeQueries.clear()
+            db.packageQueries.clearPackages()
+            db.packageQueries.clearDescriptions()
+            db.spaceQueries.clearSpaces()
+            db.spaceQueries.clearReservations()
+            db.listingQueries.clear()
+            db.movingQueries.clear()
+            db.pollQueries.clearPolls()
+            db.pollQueries.clearVotes()
+            db.fileDocQueries.clear()
+            db.chatQueries.clearThreads()
+            db.chatQueries.clearMessages()
+            db.condominiumQueries.clearCondominiums()
+            db.condominiumQueries.clearUnits()
+            db.userQueries.clear()
+            db.outboxQueries.clear()
+            db.syncMetadataQueries.clear()
+        }
     }
 
     override suspend fun currentUser(): User? {
@@ -97,14 +126,25 @@ class RemoteAuthRepository(
             api.updateAvatar(UpdateAvatarRequestDto(avatarUrl))
                 .also(::persistUser)
                 .toDomain()
-        }.also { result ->
-            if (result is AppResult.Success) {
-                val current = _session.value
-                if (current != null && current.user.id == userId) {
-                    _session.value = current.copy(user = result.data)
-                }
+        }.also { result -> syncSessionUser(userId, result) }
+
+    override suspend fun uploadAvatar(
+        userId: String, bytes: ByteArray, fileName: String, mime: String,
+    ): AppResult<User> =
+        runRemote {
+            api.uploadAvatar(bytes, fileName, mime)
+                .also(::persistUser)
+                .toDomain()
+        }.also { result -> syncSessionUser(userId, result) }
+
+    private fun syncSessionUser(userId: String, result: AppResult<User>) {
+        if (result is AppResult.Success) {
+            val current = _session.value
+            if (current != null && current.user.id == userId) {
+                _session.value = current.copy(user = result.data)
             }
         }
+    }
 
     private fun AppResult<AuthSessionDto>.onAuth(): AppResult<AuthSession> = when (this) {
         is AppResult.Success -> {

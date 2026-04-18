@@ -47,3 +47,9 @@ SELECT * FROM unit_entity WHERE condominiumId = ? AND identifier = ? AND deleted
 
 deleteUnit:
 UPDATE unit_entity SET deleted = 1, updatedAt = ? WHERE id = ?;
+
+clearCondominiums:
+DELETE FROM condominium_entity;
+
+clearUnits:
+DELETE FROM unit_entity;

@@ -48,3 +48,15 @@ SELECT * FROM poll_vote_entity WHERE pollId = ? AND deleted = 0;
 
 hasVoted:
 SELECT COUNT(*) FROM poll_vote_entity WHERE pollId = ? AND userId = ? AND deleted = 0;
+
+clearPolls:
+DELETE FROM poll_entity;
+
+clearVotes:
+DELETE FROM poll_vote_entity;
+
+deletePollById:
+DELETE FROM poll_entity WHERE id = ?;
+
+idsPollsByCondominium:
+SELECT id FROM poll_entity WHERE condominiumId = ?;

@@ -28,6 +28,10 @@ class BinaryStore {
         return url
     }
 
+    fun put(url: String, bytes: ByteArray) {
+        _entries.value = _entries.value + (url to bytes)
+    }
+
     fun get(url: String?): ByteArray? = url?.let { _entries.value[it] }
 
     fun remove(url: String?) {

@@ -55,6 +55,8 @@ class RemoteChatRepository(
 
     private val bgScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val stringListSerializer = ListSerializer(String.serializer())
+    private val reconciledThreads = mutableSetOf<String>()
+    private val reconciledMessages = mutableSetOf<String>()
 
     init {
         dispatcher.register(Entities.CHAT_THREAD, Ops.CREATE) { payload, _ ->
@@ -136,9 +138,17 @@ class RemoteChatRepository(
 
     private suspend fun pullThreads(condominiumId: String) {
         if (!network.isOnline.value) return
-        val since = db.syncMetadataQueries.getCursor(SyncCursors.chatThreadsOf(condominiumId))
+        val firstTime = condominiumId !in reconciledThreads
+        val since = if (firstTime) null
+        else db.syncMetadataQueries.getCursor(SyncCursors.chatThreadsOf(condominiumId))
             .executeAsOneOrNull()?.let { Instant.fromEpochMilliseconds(it).toString() }
         runCatching { api.listThreads(condominiumId, since) }.onSuccess { items ->
+            if (firstTime) {
+                val serverIds = items.map { it.id }.toSet()
+                val localIds = db.chatQueries.idsThreadsByCondominium(condominiumId).executeAsList().toSet()
+                (localIds - serverIds).forEach { db.chatQueries.deleteThreadById(it) }
+                reconciledThreads += condominiumId
+            }
             items.forEach(::persistThread)
             items.maxOfOrNull { Instant.parse(it.updatedAt).toEpoch() }?.let {
                 db.syncMetadataQueries.upsertCursor(SyncCursors.chatThreadsOf(condominiumId), it)
@@ -148,9 +158,17 @@ class RemoteChatRepository(
 
     private suspend fun pullMessages(threadId: String) {
         if (!network.isOnline.value) return
-        val since = db.syncMetadataQueries.getCursor(SyncCursors.chatMessagesOf(threadId))
+        val firstTime = threadId !in reconciledMessages
+        val since = if (firstTime) null
+        else db.syncMetadataQueries.getCursor(SyncCursors.chatMessagesOf(threadId))
             .executeAsOneOrNull()?.let { Instant.fromEpochMilliseconds(it).toString() }
         runCatching { api.listMessages(threadId, since) }.onSuccess { items ->
+            if (firstTime) {
+                val serverIds = items.map { it.id }.toSet()
+                val localIds = db.chatQueries.idsMessagesByThread(threadId).executeAsList().toSet()
+                (localIds - serverIds).forEach { db.chatQueries.deleteMessageById(it) }
+                reconciledMessages += threadId
+            }
             items.forEach(::persistMessage)
             items.maxOfOrNull { Instant.parse(it.updatedAt).toEpoch() }?.let {
                 db.syncMetadataQueries.upsertCursor(SyncCursors.chatMessagesOf(threadId), it)

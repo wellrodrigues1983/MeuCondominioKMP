@@ -48,3 +48,21 @@ SELECT * FROM chat_message_entity WHERE threadId = ? AND deleted = 0 ORDER BY se
 
 lastMessageUpdatedAt:
 SELECT MAX(updatedAt) FROM chat_message_entity WHERE threadId = ?;
+
+clearThreads:
+DELETE FROM chat_thread_entity;
+
+clearMessages:
+DELETE FROM chat_message_entity;
+
+deleteThreadById:
+DELETE FROM chat_thread_entity WHERE id = ?;
+
+deleteMessageById:
+DELETE FROM chat_message_entity WHERE id = ?;
+
+idsThreadsByCondominium:
+SELECT id FROM chat_thread_entity WHERE condominiumId = ?;
+
+idsMessagesByThread:
+SELECT id FROM chat_message_entity WHERE threadId = ?;

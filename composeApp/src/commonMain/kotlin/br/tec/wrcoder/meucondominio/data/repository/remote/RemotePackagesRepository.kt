@@ -54,6 +54,8 @@ class RemotePackagesRepository(
 ) : PackageRepository {
 
     private val bgScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val reconciledPackages = mutableSetOf<String>()
+    private val reconciledDescriptions = mutableSetOf<String>()
 
     init {
         dispatcher.register(Entities.PACKAGE, Ops.CREATE) { payload, _ ->
@@ -139,9 +141,17 @@ class RemotePackagesRepository(
 
     private suspend fun pullPackages(condominiumId: String) {
         if (!network.isOnline.value) return
-        val since = db.syncMetadataQueries.getCursor(SyncCursors.packagesOf(condominiumId))
+        val firstTime = condominiumId !in reconciledPackages
+        val since = if (firstTime) null
+        else db.syncMetadataQueries.getCursor(SyncCursors.packagesOf(condominiumId))
             .executeAsOneOrNull()?.let { Instant.fromEpochMilliseconds(it).toString() }
         runCatching { api.listByCondominium(condominiumId, since) }.onSuccess { items ->
+            if (firstTime) {
+                val serverIds = items.map { it.id }.toSet()
+                val localIds = db.packageQueries.idsPackagesByCondominium(condominiumId).executeAsList().toSet()
+                (localIds - serverIds).forEach { db.packageQueries.deletePackageById(it) }
+                reconciledPackages += condominiumId
+            }
             items.forEach(::persistPackage)
             items.maxOfOrNull { Instant.parse(it.updatedAt).toEpoch() }?.let {
                 db.syncMetadataQueries.upsertCursor(SyncCursors.packagesOf(condominiumId), it)
@@ -151,7 +161,14 @@ class RemotePackagesRepository(
 
     private suspend fun pullDescriptions(condominiumId: String) {
         if (!network.isOnline.value) return
+        val firstTime = condominiumId !in reconciledDescriptions
         runCatching { api.listDescriptions(condominiumId) }.onSuccess { items ->
+            if (firstTime) {
+                val serverIds = items.map { it.id }.toSet()
+                val localIds = db.packageQueries.idsDescriptionsByCondominium(condominiumId).executeAsList().toSet()
+                (localIds - serverIds).forEach { db.packageQueries.deleteDescriptionById(it) }
+                reconciledDescriptions += condominiumId
+            }
             items.forEach(::persistDescription)
         }
     }

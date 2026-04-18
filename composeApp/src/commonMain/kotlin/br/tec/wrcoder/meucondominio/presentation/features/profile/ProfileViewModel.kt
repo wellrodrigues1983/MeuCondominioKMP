@@ -84,10 +84,9 @@ class ProfileViewModel(
 
     fun onAvatarPicked(bytes: ByteArray) {
         val uid = _state.value.user?.id ?: return
-        val url = binaryStore.putImage(bytes)
         viewModelScope.launch {
-            when (val r = auth.updateAvatar(uid, url)) {
-                is AppResult.Success -> Unit
+            when (val r = auth.uploadAvatar(uid, bytes, "avatar.jpg", "image/jpeg")) {
+                is AppResult.Success -> r.data.avatarUrl?.let { binaryStore.put(it, bytes) }
                 is AppResult.Failure -> _state.update { it.copy(error = r.error.message) }
             }
         }

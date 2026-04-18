@@ -50,6 +50,7 @@ class RemoteMovingsRepository(
 ) : MovingRepository {
 
     private val bgScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val reconciled = mutableSetOf<String>()
 
     init {
         dispatcher.register(Entities.MOVING, Ops.CREATE) { payload, _ ->
@@ -132,9 +133,17 @@ class RemoteMovingsRepository(
 
     private suspend fun pull(condominiumId: String) {
         if (!network.isOnline.value) return
-        val since = db.syncMetadataQueries.getCursor(SyncCursors.movingsOf(condominiumId))
+        val firstTime = condominiumId !in reconciled
+        val since = if (firstTime) null
+        else db.syncMetadataQueries.getCursor(SyncCursors.movingsOf(condominiumId))
             .executeAsOneOrNull()?.let { Instant.fromEpochMilliseconds(it).toString() }
         runCatching { api.listByCondominium(condominiumId, since) }.onSuccess { items ->
+            if (firstTime) {
+                val serverIds = items.map { it.id }.toSet()
+                val localIds = db.movingQueries.idsByCondominium(condominiumId).executeAsList().toSet()
+                (localIds - serverIds).forEach { db.movingQueries.deleteById(it) }
+                reconciled += condominiumId
+            }
             items.forEach(::persist)
             items.maxOfOrNull { Instant.parse(it.updatedAt).toEpoch() }?.let {
                 db.syncMetadataQueries.upsertCursor(SyncCursors.movingsOf(condominiumId), it)

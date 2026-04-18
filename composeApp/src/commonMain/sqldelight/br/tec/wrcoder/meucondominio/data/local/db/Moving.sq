@@ -34,3 +34,12 @@ SELECT * FROM moving_entity WHERE id = ?;
 
 lastUpdatedAt:
 SELECT MAX(updatedAt) FROM moving_entity WHERE condominiumId = ?;
+
+clear:
+DELETE FROM moving_entity;
+
+deleteById:
+DELETE FROM moving_entity WHERE id = ?;
+
+idsByCondominium:
+SELECT id FROM moving_entity WHERE condominiumId = ?;

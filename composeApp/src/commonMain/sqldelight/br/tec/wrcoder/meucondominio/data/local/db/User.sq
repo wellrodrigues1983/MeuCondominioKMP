@@ -34,3 +34,6 @@ SELECT * FROM user_entity WHERE condominiumId = ? AND role = 'SUPERVISOR' AND de
 
 deleteUser:
 UPDATE user_entity SET deleted = 1, updatedAt = ? WHERE id = ?;
+
+clear:
+DELETE FROM user_entity;

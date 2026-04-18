@@ -162,7 +162,14 @@ class FakeAuthRepository(
     override suspend fun listUnitMembers(unitId: String): AppResult<List<User>> =
         store.users.value.filter { it.unitId == unitId }.asSuccess()
 
-    override suspend fun updateAvatar(userId: String, avatarUrl: String?): AppResult<User> {
+    override suspend fun updateAvatar(userId: String, avatarUrl: String?): AppResult<User> =
+        applyAvatar(userId, avatarUrl)
+
+    override suspend fun uploadAvatar(
+        userId: String, bytes: ByteArray, fileName: String, mime: String,
+    ): AppResult<User> = applyAvatar(userId, "/assets/${newId()}")
+
+    private fun applyAvatar(userId: String, avatarUrl: String?): AppResult<User> {
         val updated = store.users.value.firstOrNull { it.id == userId }?.copy(avatarUrl = avatarUrl)
             ?: return AppError.NotFound("Usuário não encontrado").asFailure()
         store.users.value = store.users.value.map { if (it.id == userId) updated else it }

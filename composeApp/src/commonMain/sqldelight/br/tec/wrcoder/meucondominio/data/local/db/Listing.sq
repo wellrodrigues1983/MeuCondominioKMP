@@ -30,3 +30,12 @@ SELECT * FROM listing_entity WHERE id = ?;
 
 lastUpdatedAt:
 SELECT MAX(updatedAt) FROM listing_entity WHERE condominiumId = ?;
+
+clear:
+DELETE FROM listing_entity;
+
+deleteById:
+DELETE FROM listing_entity WHERE id = ?;
+
+idsByCondominium:
+SELECT id FROM listing_entity WHERE condominiumId = ?;

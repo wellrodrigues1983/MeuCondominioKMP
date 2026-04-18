@@ -69,6 +69,9 @@ class RemoteSpacesRepository(
 ) : SpaceRepository {
 
     private val bgScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val reconciledSpaces = mutableSetOf<String>()
+    private val reconciledReservationsBySpace = mutableSetOf<String>()
+    private val reconciledReservationsByUnit = mutableSetOf<String>()
 
     init {
         dispatcher.register(Entities.SPACE, Ops.CREATE) { payload, _ ->
@@ -206,9 +209,17 @@ class RemoteSpacesRepository(
 
     private suspend fun pullSpaces(condominiumId: String) {
         if (!network.isOnline.value) return
-        val since = db.syncMetadataQueries.getCursor(SyncCursors.spacesOf(condominiumId))
+        val firstTime = condominiumId !in reconciledSpaces
+        val since = if (firstTime) null
+        else db.syncMetadataQueries.getCursor(SyncCursors.spacesOf(condominiumId))
             .executeAsOneOrNull()?.let { Instant.fromEpochMilliseconds(it).toString() }
         runCatching { api.listSpaces(condominiumId, since) }.onSuccess { items ->
+            if (firstTime) {
+                val serverIds = items.map { it.id }.toSet()
+                val localIds = db.spaceQueries.idsSpacesByCondominium(condominiumId).executeAsList().toSet()
+                (localIds - serverIds).forEach { db.spaceQueries.deleteSpaceById(it) }
+                reconciledSpaces += condominiumId
+            }
             items.forEach(::persistSpace)
             items.maxOfOrNull { Instant.parse(it.updatedAt).toEpoch() }?.let {
                 db.syncMetadataQueries.upsertCursor(SyncCursors.spacesOf(condominiumId), it)
@@ -218,10 +229,18 @@ class RemoteSpacesRepository(
 
     private suspend fun pullReservationsBySpace(spaceId: String) {
         if (!network.isOnline.value) return
+        val firstTime = spaceId !in reconciledReservationsBySpace
         val key = SyncCursors.reservationsOfSpace(spaceId)
-        val since = db.syncMetadataQueries.getCursor(key).executeAsOneOrNull()
+        val since = if (firstTime) null
+        else db.syncMetadataQueries.getCursor(key).executeAsOneOrNull()
             ?.let { Instant.fromEpochMilliseconds(it).toString() }
         runCatching { api.listReservationsBySpace(spaceId, since) }.onSuccess { items ->
+            if (firstTime) {
+                val serverIds = items.map { it.id }.toSet()
+                val localIds = db.spaceQueries.idsReservationsBySpace(spaceId).executeAsList().toSet()
+                (localIds - serverIds).forEach { db.spaceQueries.deleteReservationById(it) }
+                reconciledReservationsBySpace += spaceId
+            }
             items.forEach(::persistReservation)
             items.maxOfOrNull { Instant.parse(it.updatedAt).toEpoch() }?.let {
                 db.syncMetadataQueries.upsertCursor(key, it)
@@ -231,10 +250,18 @@ class RemoteSpacesRepository(
 
     private suspend fun pullReservationsByUnit(unitId: String) {
         if (!network.isOnline.value) return
+        val firstTime = unitId !in reconciledReservationsByUnit
         val key = SyncCursors.reservationsOfUnit(unitId)
-        val since = db.syncMetadataQueries.getCursor(key).executeAsOneOrNull()
+        val since = if (firstTime) null
+        else db.syncMetadataQueries.getCursor(key).executeAsOneOrNull()
             ?.let { Instant.fromEpochMilliseconds(it).toString() }
         runCatching { api.listReservationsByUnit(unitId, since) }.onSuccess { items ->
+            if (firstTime) {
+                val serverIds = items.map { it.id }.toSet()
+                val localIds = db.spaceQueries.idsReservationsByUnit(unitId).executeAsList().toSet()
+                (localIds - serverIds).forEach { db.spaceQueries.deleteReservationById(it) }
+                reconciledReservationsByUnit += unitId
+            }
             items.forEach(::persistReservation)
             items.maxOfOrNull { Instant.parse(it.updatedAt).toEpoch() }?.let {
                 db.syncMetadataQueries.upsertCursor(key, it)

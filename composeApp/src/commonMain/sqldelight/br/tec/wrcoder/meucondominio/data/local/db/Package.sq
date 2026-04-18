@@ -50,3 +50,21 @@ VALUES (?, ?, ?, ?, ?, ?);
 
 observeDescriptions:
 SELECT * FROM package_description_entity WHERE condominiumId = ? AND deleted = 0 ORDER BY text;
+
+clearPackages:
+DELETE FROM package_entity;
+
+clearDescriptions:
+DELETE FROM package_description_entity;
+
+deletePackageById:
+DELETE FROM package_entity WHERE id = ?;
+
+deleteDescriptionById:
+DELETE FROM package_description_entity WHERE id = ?;
+
+idsPackagesByCondominium:
+SELECT id FROM package_entity WHERE condominiumId = ?;
+
+idsDescriptionsByCondominium:
+SELECT id FROM package_description_entity WHERE condominiumId = ?;

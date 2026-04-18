@@ -126,7 +126,7 @@ fun commonModule(): Module = module {
         singleOf(::FakePollsRepository) bind PollsRepository::class
         singleOf(::FakeChatRepository) bind ChatRepository::class
     } else {
-        single<AuthRepository> { RemoteAuthRepository(get(), get(), get()) }
+        single<AuthRepository> { RemoteAuthRepository(get(), get(), get(), get()) }
         single<CondominiumRepository> { RemoteCondominiumRepository(get(), get(), get()) }
         single<NoticeRepository> { RemoteNoticesRepository(get(), get(), get(), get(), get(), get()) }
         single<SpaceRepository> { RemoteSpacesRepository(get(), get(), get(), get(), get(), get()) }

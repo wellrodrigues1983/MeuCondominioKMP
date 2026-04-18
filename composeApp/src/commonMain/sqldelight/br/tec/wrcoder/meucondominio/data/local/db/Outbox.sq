@@ -27,3 +27,6 @@ DELETE FROM outbox_entry WHERE id = ?;
 
 pendingCount:
 SELECT COUNT(*) FROM outbox_entry;
+
+clear:
+DELETE FROM outbox_entry;

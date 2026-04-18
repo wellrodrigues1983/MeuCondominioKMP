@@ -62,3 +62,24 @@ SELECT * FROM reservation_entity WHERE unitId = ? AND deleted = 0 ORDER BY dateE
 
 getReservation:
 SELECT * FROM reservation_entity WHERE id = ?;
+
+clearSpaces:
+DELETE FROM space_entity;
+
+clearReservations:
+DELETE FROM reservation_entity;
+
+deleteSpaceById:
+DELETE FROM space_entity WHERE id = ?;
+
+deleteReservationById:
+DELETE FROM reservation_entity WHERE id = ?;
+
+idsSpacesByCondominium:
+SELECT id FROM space_entity WHERE condominiumId = ?;
+
+idsReservationsBySpace:
+SELECT id FROM reservation_entity WHERE spaceId = ?;
+
+idsReservationsByUnit:
+SELECT id FROM reservation_entity WHERE unitId = ?;

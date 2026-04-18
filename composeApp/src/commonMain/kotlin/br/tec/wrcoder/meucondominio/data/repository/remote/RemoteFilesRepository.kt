@@ -30,6 +30,7 @@ class RemoteFilesRepository(
 ) : FilesRepository {
 
     private val bgScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val reconciled = mutableSetOf<String>()
 
     override fun observe(condominiumId: String): Flow<List<FileDoc>> =
         db.fileDocQueries.observe(condominiumId).asFlow().mapToList(Dispatchers.Default)
@@ -64,9 +65,17 @@ class RemoteFilesRepository(
 
     private suspend fun pull(condominiumId: String) {
         if (!network.isOnline.value) return
-        val since = db.syncMetadataQueries.getCursor(SyncCursors.filesOf(condominiumId))
+        val firstTime = condominiumId !in reconciled
+        val since = if (firstTime) null
+        else db.syncMetadataQueries.getCursor(SyncCursors.filesOf(condominiumId))
             .executeAsOneOrNull()?.let { Instant.fromEpochMilliseconds(it).toString() }
         runCatching { api.list(condominiumId, since) }.onSuccess { items ->
+            if (firstTime) {
+                val serverIds = items.map { it.id }.toSet()
+                val localIds = db.fileDocQueries.idsByCondominium(condominiumId).executeAsList().toSet()
+                (localIds - serverIds).forEach { db.fileDocQueries.deleteById(it) }
+                reconciled += condominiumId
+            }
             items.forEach(::persist)
             items.maxOfOrNull { Instant.parse(it.updatedAt).toEpoch() }?.let {
                 db.syncMetadataQueries.upsertCursor(SyncCursors.filesOf(condominiumId), it)

@@ -26,6 +26,7 @@ import br.tec.wrcoder.meucondominio.data.remote.dto.LoginRequestDto
 import br.tec.wrcoder.meucondominio.data.remote.dto.MovingDto
 import br.tec.wrcoder.meucondominio.data.remote.dto.NoticeDto
 import br.tec.wrcoder.meucondominio.data.remote.dto.PackageDescriptionDto
+import br.tec.wrcoder.meucondominio.data.remote.dto.PageDto
 import br.tec.wrcoder.meucondominio.data.remote.dto.PackageItemDto
 import br.tec.wrcoder.meucondominio.data.remote.dto.PollDto
 import br.tec.wrcoder.meucondominio.data.remote.dto.PollResultsDto
@@ -63,6 +64,23 @@ class AuthApiService(private val http: HttpClient) {
     suspend fun logout() { http.post("auth/logout") }
     suspend fun me(): UserDto = http.get("me").body()
     suspend fun updateAvatar(body: UpdateAvatarRequestDto): UserDto = http.patch("me/avatar") { setBody(body) }.body()
+    suspend fun uploadAvatar(bytes: ByteArray, fileName: String, mime: String): UserDto =
+        http.patch("me/avatar") {
+            setBody(
+                MultiPartFormDataContent(
+                    formData {
+                        append(
+                            "file",
+                            bytes,
+                            Headers.build {
+                                append(HttpHeaders.ContentType, mime)
+                                append(HttpHeaders.ContentDisposition, "filename=\"$fileName\"")
+                            },
+                        )
+                    }
+                )
+            )
+        }.body()
     suspend fun createUnitMember(unitId: String, body: CreateMemberRequestDto): UserDto =
         http.post("units/$unitId/members") { setBody(body) }.body()
     suspend fun listUnitMembers(unitId: String): List<UserDto> =
@@ -73,7 +91,7 @@ class CondominiumApiService(private val http: HttpClient) {
     suspend fun byCode(code: String): CondominiumDto = http.get("condominiums/by-code/$code").body()
     suspend fun get(id: String): CondominiumDto = http.get("condominiums/$id").body()
     suspend fun listUnits(condominiumId: String): List<CondoUnitDto> =
-        http.get("condominiums/$condominiumId/units").body()
+        http.get("condominiums/$condominiumId/units").body<PageDto<CondoUnitDto>>().items
     suspend fun findUnitByIdentifier(condominiumId: String, identifier: String): CondoUnitDto =
         http.get("condominiums/$condominiumId/units/by-identifier/$identifier").body()
     suspend fun createUnit(condominiumId: String, body: CreateUnitRequestDto): CondoUnitDto =
@@ -82,7 +100,8 @@ class CondominiumApiService(private val http: HttpClient) {
 
 class NoticesApiService(private val http: HttpClient) {
     suspend fun list(condominiumId: String, updatedSince: String? = null): List<NoticeDto> =
-        http.get("condominiums/$condominiumId/notices") { updatedSince?.let { parameter("updatedSince", it) } }.body()
+        http.get("condominiums/$condominiumId/notices") { updatedSince?.let { parameter("updatedSince", it) } }
+            .body<PageDto<NoticeDto>>().items
     suspend fun create(condominiumId: String, body: CreateNoticeRequestDto): NoticeDto =
         http.post("condominiums/$condominiumId/notices") { setBody(body) }.body()
     suspend fun update(id: String, body: UpdateNoticeRequestDto): NoticeDto =
@@ -92,16 +111,19 @@ class NoticesApiService(private val http: HttpClient) {
 
 class SpacesApiService(private val http: HttpClient) {
     suspend fun listSpaces(condominiumId: String, updatedSince: String? = null): List<CommonSpaceDto> =
-        http.get("condominiums/$condominiumId/spaces") { updatedSince?.let { parameter("updatedSince", it) } }.body()
+        http.get("condominiums/$condominiumId/spaces") { updatedSince?.let { parameter("updatedSince", it) } }
+            .body<PageDto<CommonSpaceDto>>().items
     suspend fun createSpace(condominiumId: String, body: CreateSpaceRequestDto): CommonSpaceDto =
         http.post("condominiums/$condominiumId/spaces") { setBody(body) }.body()
     suspend fun updateSpace(id: String, body: UpdateSpaceRequestDto): CommonSpaceDto =
         http.patch("spaces/$id") { setBody(body) }.body()
     suspend fun deleteSpace(id: String) { http.delete("spaces/$id") }
     suspend fun listReservationsBySpace(spaceId: String, updatedSince: String? = null): List<ReservationDto> =
-        http.get("spaces/$spaceId/reservations") { updatedSince?.let { parameter("updatedSince", it) } }.body()
+        http.get("spaces/$spaceId/reservations") { updatedSince?.let { parameter("updatedSince", it) } }
+            .body<PageDto<ReservationDto>>().items
     suspend fun listReservationsByUnit(unitId: String, updatedSince: String? = null): List<ReservationDto> =
-        http.get("units/$unitId/reservations") { updatedSince?.let { parameter("updatedSince", it) } }.body()
+        http.get("units/$unitId/reservations") { updatedSince?.let { parameter("updatedSince", it) } }
+            .body<PageDto<ReservationDto>>().items
     suspend fun reserve(spaceId: String, body: CreateReservationRequestDto): ReservationDto =
         http.post("spaces/$spaceId/reservations") { setBody(body) }.body()
     suspend fun cancelByResident(reservationId: String): ReservationDto =
@@ -112,7 +134,8 @@ class SpacesApiService(private val http: HttpClient) {
 
 class ListingsApiService(private val http: HttpClient) {
     suspend fun list(condominiumId: String, updatedSince: String? = null): List<ListingDto> =
-        http.get("condominiums/$condominiumId/listings") { updatedSince?.let { parameter("updatedSince", it) } }.body()
+        http.get("condominiums/$condominiumId/listings") { updatedSince?.let { parameter("updatedSince", it) } }
+            .body<PageDto<ListingDto>>().items
     suspend fun create(condominiumId: String, body: CreateListingRequestDto): ListingDto =
         http.post("condominiums/$condominiumId/listings") { setBody(body) }.body()
     suspend fun close(id: String): ListingDto = http.post("listings/$id/close").body()
@@ -121,9 +144,11 @@ class ListingsApiService(private val http: HttpClient) {
 
 class MovingsApiService(private val http: HttpClient) {
     suspend fun listByCondominium(condominiumId: String, updatedSince: String? = null): List<MovingDto> =
-        http.get("condominiums/$condominiumId/movings") { updatedSince?.let { parameter("updatedSince", it) } }.body()
+        http.get("condominiums/$condominiumId/movings") { updatedSince?.let { parameter("updatedSince", it) } }
+            .body<PageDto<MovingDto>>().items
     suspend fun listByUnit(unitId: String, updatedSince: String? = null): List<MovingDto> =
-        http.get("units/$unitId/movings") { updatedSince?.let { parameter("updatedSince", it) } }.body()
+        http.get("units/$unitId/movings") { updatedSince?.let { parameter("updatedSince", it) } }
+            .body<PageDto<MovingDto>>().items
     suspend fun create(condominiumId: String, body: CreateMovingRequestDto): MovingDto =
         http.post("condominiums/$condominiumId/movings") { setBody(body) }.body()
     suspend fun approve(id: String): MovingDto = http.post("movings/$id/approve").body()
@@ -135,7 +160,8 @@ class MovingsApiService(private val http: HttpClient) {
 
 class FilesApiService(private val http: HttpClient) {
     suspend fun list(condominiumId: String, updatedSince: String? = null): List<FileDocDto> =
-        http.get("condominiums/$condominiumId/files") { updatedSince?.let { parameter("updatedSince", it) } }.body()
+        http.get("condominiums/$condominiumId/files") { updatedSince?.let { parameter("updatedSince", it) } }
+            .body<PageDto<FileDocDto>>().items
     suspend fun upload(
         condominiumId: String,
         title: String,
@@ -165,7 +191,8 @@ class FilesApiService(private val http: HttpClient) {
 
 class PollsApiService(private val http: HttpClient) {
     suspend fun list(condominiumId: String, updatedSince: String? = null): List<PollDto> =
-        http.get("condominiums/$condominiumId/polls") { updatedSince?.let { parameter("updatedSince", it) } }.body()
+        http.get("condominiums/$condominiumId/polls") { updatedSince?.let { parameter("updatedSince", it) } }
+            .body<PageDto<PollDto>>().items
     suspend fun create(condominiumId: String, body: CreatePollRequestDto): PollDto =
         http.post("condominiums/$condominiumId/polls") { setBody(body) }.body()
     suspend fun cancel(id: String): PollDto = http.post("polls/$id/cancel").body()
@@ -176,9 +203,11 @@ class PollsApiService(private val http: HttpClient) {
 
 class PackagesApiService(private val http: HttpClient) {
     suspend fun listByCondominium(condominiumId: String, updatedSince: String? = null): List<PackageItemDto> =
-        http.get("condominiums/$condominiumId/packages") { updatedSince?.let { parameter("updatedSince", it) } }.body()
+        http.get("condominiums/$condominiumId/packages") { updatedSince?.let { parameter("updatedSince", it) } }
+            .body<PageDto<PackageItemDto>>().items
     suspend fun listByUnit(unitId: String, updatedSince: String? = null): List<PackageItemDto> =
-        http.get("units/$unitId/packages") { updatedSince?.let { parameter("updatedSince", it) } }.body()
+        http.get("units/$unitId/packages") { updatedSince?.let { parameter("updatedSince", it) } }
+            .body<PageDto<PackageItemDto>>().items
     suspend fun register(condominiumId: String, body: RegisterPackageRequestDto): PackageItemDto =
         http.post("condominiums/$condominiumId/packages") { setBody(body) }.body()
     suspend fun markPickedUp(id: String): PackageItemDto = http.post("packages/$id/pickup").body()
@@ -190,11 +219,13 @@ class PackagesApiService(private val http: HttpClient) {
 
 class ChatApiService(private val http: HttpClient) {
     suspend fun listThreads(condominiumId: String, updatedSince: String? = null): List<ChatThreadDto> =
-        http.get("condominiums/$condominiumId/chat-threads") { updatedSince?.let { parameter("updatedSince", it) } }.body()
+        http.get("condominiums/$condominiumId/chat-threads") { updatedSince?.let { parameter("updatedSince", it) } }
+            .body<PageDto<ChatThreadDto>>().items
     suspend fun createThread(condominiumId: String, body: CreateChatThreadRequestDto): ChatThreadDto =
         http.post("condominiums/$condominiumId/chat-threads") { setBody(body) }.body()
     suspend fun listMessages(threadId: String, since: String? = null): List<ChatMessageDto> =
-        http.get("chat-threads/$threadId/messages") { since?.let { parameter("since", it) } }.body()
+        http.get("chat-threads/$threadId/messages") { since?.let { parameter("since", it) } }
+            .body<PageDto<ChatMessageDto>>().items
     suspend fun sendMessage(threadId: String, body: SendMessageRequestDto): ChatMessageDto =
         http.post("chat-threads/$threadId/messages") { setBody(body) }.body()
 }
