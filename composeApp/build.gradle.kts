@@ -14,8 +14,8 @@ val localProps = Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) f.inputStream().use { load(it) }
 }
-val apiBaseUrl: String = (localProps["api.baseUrl"] as String?) ?: "https://api.meucondominio.example/v1"
-val useFake: Boolean = ((localProps["app.useFake"] as String?) ?: "true").toBoolean()
+val apiBaseUrl: String = (localProps["api.baseUrl"] as String?) ?: "http://localhost:8080/v1"
+val useFake: Boolean = ((localProps["app.useFake"] as String?) ?: "false").toBoolean()
 
 val generatedBuildConfigDir = layout.buildDirectory.dir("generated/buildconfig/commonMain/kotlin")
 

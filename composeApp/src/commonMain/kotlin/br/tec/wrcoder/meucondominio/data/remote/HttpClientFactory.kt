@@ -12,7 +12,6 @@ import io.ktor.client.plugins.auth.providers.BearerTokens
 import io.ktor.client.plugins.auth.providers.bearer
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
-import io.ktor.client.plugins.logging.DEFAULT
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logger
 import io.ktor.client.plugins.logging.Logging
@@ -49,8 +48,12 @@ fun createHttpClient(tokenStore: TokenStore): HttpClient = httpEngineClient {
         socketTimeoutMillis = 20_000
     }
     install(Logging) {
-        logger = Logger.DEFAULT
-        level = LogLevel.INFO
+        logger = object : Logger {
+            override fun log(message: String) {
+                println("[Ktor] $message")
+            }
+        }
+        level = LogLevel.ALL
     }
     install(Auth) {
         bearer {
