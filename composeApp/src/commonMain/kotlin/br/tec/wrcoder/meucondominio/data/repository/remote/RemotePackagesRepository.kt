@@ -4,8 +4,8 @@ import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import br.tec.wrcoder.meucondominio.core.AppClock
 import br.tec.wrcoder.meucondominio.core.AppResult
-import br.tec.wrcoder.meucondominio.core.newId
 import br.tec.wrcoder.meucondominio.core.network.NetworkMonitor
+import br.tec.wrcoder.meucondominio.core.newId
 import br.tec.wrcoder.meucondominio.data.local.db.MeuCondominioDb
 import br.tec.wrcoder.meucondominio.data.mapper.toEpoch
 import br.tec.wrcoder.meucondominio.data.remote.PackagesApiService
@@ -55,12 +55,14 @@ class RemotePackagesRepository(
 
     private val bgScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val reconciledPackages = mutableSetOf<String>()
+    private val reconciledPackagesByUnit = mutableSetOf<String>()
     private val reconciledDescriptions = mutableSetOf<String>()
 
     init {
         dispatcher.register(Entities.PACKAGE, Ops.CREATE) { payload, _ ->
             val p = json.decodeFromString(RegisterPackagePayload.serializer(), payload)
             val dto = api.register(p.condominiumId, RegisterPackageRequestDto(p.unitId, p.description, p.carrier))
+            if (dto.id != p.id) db.packageQueries.deletePackageById(p.id)
             persistPackage(dto)
         }
         dispatcher.register(Entities.PACKAGE, Ops.PICKUP) { payload, _ ->
@@ -69,7 +71,10 @@ class RemotePackagesRepository(
         }
         dispatcher.register(Entities.PACKAGE_DESCRIPTION, Ops.CREATE) { payload, _ ->
             val p = json.decodeFromString(CreateDescriptionPayload.serializer(), payload)
-            persistDescription(api.createDescription(p.condominiumId, CreatePackageDescriptionRequestDto(p.text)))
+            val dto =
+                api.createDescription(p.condominiumId, CreatePackageDescriptionRequestDto(p.text))
+            if (dto.id != p.id) db.packageQueries.deleteDescriptionById(p.id)
+            persistDescription(dto)
         }
     }
 
@@ -81,6 +86,7 @@ class RemotePackagesRepository(
     override fun observeByUnit(unitId: String): Flow<List<PackageItem>> =
         db.packageQueries.observeByUnit(unitId).asFlow().mapToList(Dispatchers.Default)
             .map { rows -> rows.map { it.toDomain() } }
+            .onStart { bgScope.launch { pullPackagesByUnit(unitId) } }
 
     override suspend fun register(
         condominiumId: String, unitId: String, description: String,
@@ -155,6 +161,21 @@ class RemotePackagesRepository(
             items.forEach(::persistPackage)
             items.maxOfOrNull { Instant.parse(it.updatedAt).toEpoch() }?.let {
                 db.syncMetadataQueries.upsertCursor(SyncCursors.packagesOf(condominiumId), it)
+            }
+        }
+    }
+
+    private suspend fun pullPackagesByUnit(unitId: String) {
+        if (!network.isOnline.value) return
+        val firstTime = unitId !in reconciledPackagesByUnit
+        val since = if (firstTime) null
+        else db.syncMetadataQueries.getCursor(SyncCursors.packagesOfUnit(unitId))
+            .executeAsOneOrNull()?.let { Instant.fromEpochMilliseconds(it).toString() }
+        runCatching { api.listByUnit(unitId, since) }.onSuccess { items ->
+            if (firstTime) reconciledPackagesByUnit += unitId
+            items.forEach(::persistPackage)
+            items.maxOfOrNull { Instant.parse(it.updatedAt).toEpoch() }?.let {
+                db.syncMetadataQueries.upsertCursor(SyncCursors.packagesOfUnit(unitId), it)
             }
         }
     }

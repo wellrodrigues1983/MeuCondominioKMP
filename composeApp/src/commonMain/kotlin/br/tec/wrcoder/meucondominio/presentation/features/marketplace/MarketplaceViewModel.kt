@@ -81,8 +81,20 @@ class MarketplaceViewModel(
             return
         }
         val e = _editor.value
+        if (e.title.isBlank()) {
+            _error.value = "Informe o título"; return
+        }
+        if (e.description.isBlank()) {
+            _error.value = "Informe a descrição"; return
+        }
         val price = e.price.replace(',', '.').toDoubleOrNull()
-        val images = e.imageBytes?.let { listOf(binaryStore.putImage(it)) } ?: emptyList()
+        if (e.price.isBlank() || price == null || price <= 0.0) {
+            _error.value = "Informe um preço válido"; return
+        }
+        val bytes = e.imageBytes ?: run {
+            _error.value = "Selecione uma foto do produto"; return
+        }
+        val images = listOf(binaryStore.putImage(bytes))
         viewModelScope.launch {
             val unit = (condos.listUnits(u.condominiumId) as? AppResult.Success)?.data
                 ?.firstOrNull { it.id == unitId }

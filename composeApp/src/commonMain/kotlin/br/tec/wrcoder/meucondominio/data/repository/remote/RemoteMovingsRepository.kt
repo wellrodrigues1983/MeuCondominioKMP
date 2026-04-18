@@ -5,8 +5,8 @@ import app.cash.sqldelight.coroutines.mapToList
 import br.tec.wrcoder.meucondominio.core.AppClock
 import br.tec.wrcoder.meucondominio.core.AppError
 import br.tec.wrcoder.meucondominio.core.AppResult
-import br.tec.wrcoder.meucondominio.core.newId
 import br.tec.wrcoder.meucondominio.core.network.NetworkMonitor
+import br.tec.wrcoder.meucondominio.core.newId
 import br.tec.wrcoder.meucondominio.data.local.db.MeuCondominioDb
 import br.tec.wrcoder.meucondominio.data.mapper.toEpoch
 import br.tec.wrcoder.meucondominio.data.remote.MovingsApiService
@@ -51,11 +51,14 @@ class RemoteMovingsRepository(
 
     private val bgScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val reconciled = mutableSetOf<String>()
+    private val reconciledUnits = mutableSetOf<String>()
 
     init {
         dispatcher.register(Entities.MOVING, Ops.CREATE) { payload, _ ->
             val p = json.decodeFromString(CreatePayload.serializer(), payload)
-            persist(api.create(p.condominiumId, CreateMovingRequestDto(p.unitId, p.scheduledFor)))
+            val dto = api.create(p.condominiumId, CreateMovingRequestDto(p.unitId, p.scheduledFor))
+            if (dto.id != p.id) db.movingQueries.deleteById(p.id)
+            persist(dto)
         }
         dispatcher.register(Entities.MOVING, Ops.APPROVE) { payload, _ ->
             val p = json.decodeFromString(DecisionPayload.serializer(), payload)
@@ -79,6 +82,7 @@ class RemoteMovingsRepository(
     override fun observeByUnit(unitId: String): Flow<List<MovingRequest>> =
         db.movingQueries.observeByUnit(unitId).asFlow().mapToList(Dispatchers.Default)
             .map { rows -> rows.map { it.toDomain() } }
+            .onStart { bgScope.launch { pullByUnit(unitId) } }
 
     override suspend fun request(
         condominiumId: String, unitId: String, residentUserId: String, scheduledFor: LocalDateTime,
@@ -95,11 +99,12 @@ class RemoteMovingsRepository(
             createdAt = now.toEpoch(), decisionReason = null, decidedByUserId = null,
             decidedAt = null, updatedAt = now.toEpoch(), version = 0, deleted = 0,
         )
+        val optimistic = db.movingQueries.get(id).executeAsOne().toDomain()
         dispatcher.enqueue(Entities.MOVING, Ops.CREATE, id,
             json.encodeToString(CreatePayload.serializer(),
                 CreatePayload(id, condominiumId, unitId, scheduledFor.toString())))
         if (network.isOnline.value) runCatching { dispatcher.drain() }
-        return AppResult.Success(db.movingQueries.get(id).executeAsOne().toDomain())
+        return AppResult.Success(optimistic)
     }
 
     override suspend fun approve(id: String, staffUserId: String): AppResult<MovingRequest> =
@@ -129,6 +134,21 @@ class RemoteMovingsRepository(
             json.encodeToString(DecisionPayload.serializer(), DecisionPayload(id, reason)))
         if (network.isOnline.value) runCatching { dispatcher.drain() }
         return AppResult.Success(db.movingQueries.get(id).executeAsOne().toDomain())
+    }
+
+    private suspend fun pullByUnit(unitId: String) {
+        if (!network.isOnline.value) return
+        val firstTime = unitId !in reconciledUnits
+        val since = if (firstTime) null
+        else db.syncMetadataQueries.getCursor(SyncCursors.movingsOfUnit(unitId))
+            .executeAsOneOrNull()?.let { Instant.fromEpochMilliseconds(it).toString() }
+        runCatching { api.listByUnit(unitId, since) }.onSuccess { items ->
+            if (firstTime) reconciledUnits += unitId
+            items.forEach(::persist)
+            items.maxOfOrNull { Instant.parse(it.updatedAt).toEpoch() }?.let {
+                db.syncMetadataQueries.upsertCursor(SyncCursors.movingsOfUnit(unitId), it)
+            }
+        }
     }
 
     private suspend fun pull(condominiumId: String) {

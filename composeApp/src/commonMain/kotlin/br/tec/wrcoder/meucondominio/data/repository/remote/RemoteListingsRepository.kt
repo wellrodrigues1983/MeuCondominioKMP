@@ -5,8 +5,8 @@ import app.cash.sqldelight.coroutines.mapToList
 import br.tec.wrcoder.meucondominio.core.AppClock
 import br.tec.wrcoder.meucondominio.core.AppError
 import br.tec.wrcoder.meucondominio.core.AppResult
-import br.tec.wrcoder.meucondominio.core.newId
 import br.tec.wrcoder.meucondominio.core.network.NetworkMonitor
+import br.tec.wrcoder.meucondominio.core.newId
 import br.tec.wrcoder.meucondominio.data.local.db.MeuCondominioDb
 import br.tec.wrcoder.meucondominio.data.mapper.decodeStrings
 import br.tec.wrcoder.meucondominio.data.mapper.encodeStrings
@@ -62,8 +62,12 @@ class RemoteListingsRepository(
     init {
         dispatcher.register(Entities.LISTING, Ops.CREATE) { payload, _ ->
             val p = json.decodeFromString(CreateListingPayload.serializer(), payload)
-            persist(api.create(p.condominiumId,
-                CreateListingRequestDto(p.title, p.description, p.price, p.imageUrls)))
+            val dto = api.create(
+                p.condominiumId,
+                CreateListingRequestDto(p.title, p.description, p.price, p.imageUrls)
+            )
+            if (dto.id != p.id) db.listingQueries.deleteById(p.id)
+            persist(dto)
         }
         dispatcher.register(Entities.LISTING, Ops.CLOSE) { payload, _ ->
             val p = json.decodeFromString(CloseListingPayload.serializer(), payload)
@@ -96,11 +100,12 @@ class RemoteListingsRepository(
             createdAt = now.toEpoch(), expiresAt = expiresAt.toEpoch(), updatedAt = now.toEpoch(),
             version = 0, deleted = 0,
         )
+        val optimistic = db.listingQueries.get(id).executeAsOne().toDomain()
         dispatcher.enqueue(Entities.LISTING, Ops.CREATE, id,
             json.encodeToString(CreateListingPayload.serializer(),
                 CreateListingPayload(id, condominiumId, title, description, price, imageUrls)))
         if (network.isOnline.value) runCatching { dispatcher.drain() }
-        return AppResult.Success(db.listingQueries.get(id).executeAsOne().toDomain())
+        return AppResult.Success(optimistic)
     }
 
     override suspend fun close(id: String, userId: String): AppResult<Listing> =

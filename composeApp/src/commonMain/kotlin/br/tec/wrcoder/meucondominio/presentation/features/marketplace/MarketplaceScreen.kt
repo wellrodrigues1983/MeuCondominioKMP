@@ -112,7 +112,7 @@ fun MarketplaceScreen(vm: MarketplaceViewModel = koinViewModel(), navigator: App
                     OutlinedTextField(
                         s.editor.price,
                         { v -> vm.update { copy(price = v) } },
-                        label = { Text("Preço (opcional)") },
+                        label = { Text("Preço") },
                         shape = RoundedCornerShape(12.dp),
                     )
                     ImagePickerField(

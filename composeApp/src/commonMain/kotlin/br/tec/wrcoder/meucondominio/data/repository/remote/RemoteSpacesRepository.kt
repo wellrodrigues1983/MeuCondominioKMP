@@ -5,8 +5,8 @@ import app.cash.sqldelight.coroutines.mapToList
 import br.tec.wrcoder.meucondominio.core.AppClock
 import br.tec.wrcoder.meucondominio.core.AppError
 import br.tec.wrcoder.meucondominio.core.AppResult
-import br.tec.wrcoder.meucondominio.core.newId
 import br.tec.wrcoder.meucondominio.core.network.NetworkMonitor
+import br.tec.wrcoder.meucondominio.core.newId
 import br.tec.wrcoder.meucondominio.data.local.db.MeuCondominioDb
 import br.tec.wrcoder.meucondominio.data.mapper.decodeStrings
 import br.tec.wrcoder.meucondominio.data.mapper.encodeStrings
@@ -76,8 +76,12 @@ class RemoteSpacesRepository(
     init {
         dispatcher.register(Entities.SPACE, Ops.CREATE) { payload, _ ->
             val p = json.decodeFromString(CreateSpacePayload.serializer(), payload)
-            persistSpace(api.createSpace(p.condominiumId,
-                CreateSpaceRequestDto(p.name, p.description, p.price, p.imageUrls)))
+            val dto = api.createSpace(
+                p.condominiumId,
+                CreateSpaceRequestDto(p.name, p.description, p.price, p.imageUrls)
+            )
+            if (dto.id != p.id) db.spaceQueries.deleteSpaceById(p.id)
+            persistSpace(dto)
         }
         dispatcher.register(Entities.SPACE, Ops.UPDATE) { payload, _ ->
             val p = json.decodeFromString(UpdateSpacePayload.serializer(), payload)
@@ -90,7 +94,9 @@ class RemoteSpacesRepository(
         }
         dispatcher.register(Entities.RESERVATION, Ops.CREATE) { payload, _ ->
             val p = json.decodeFromString(ReservePayload.serializer(), payload)
-            persistReservation(api.reserve(p.spaceId, CreateReservationRequestDto(p.unitId, p.date)))
+            val dto = api.reserve(p.spaceId, CreateReservationRequestDto(p.unitId, p.date))
+            if (dto.id != p.id) db.spaceQueries.deleteReservationById(p.id)
+            persistReservation(dto)
         }
         dispatcher.register(Entities.RESERVATION, Ops.CANCEL_RESIDENT) { payload, _ ->
             val p = json.decodeFromString(CancelPayload.serializer(), payload)

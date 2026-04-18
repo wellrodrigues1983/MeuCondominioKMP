@@ -5,14 +5,13 @@ import app.cash.sqldelight.coroutines.mapToList
 import br.tec.wrcoder.meucondominio.core.AppClock
 import br.tec.wrcoder.meucondominio.core.AppError
 import br.tec.wrcoder.meucondominio.core.AppResult
-import br.tec.wrcoder.meucondominio.core.newId
 import br.tec.wrcoder.meucondominio.core.network.NetworkMonitor
+import br.tec.wrcoder.meucondominio.core.newId
 import br.tec.wrcoder.meucondominio.data.local.db.MeuCondominioDb
 import br.tec.wrcoder.meucondominio.data.mapper.toEpoch
 import br.tec.wrcoder.meucondominio.data.remote.PollsApiService
 import br.tec.wrcoder.meucondominio.data.remote.dto.CreatePollRequestDto
 import br.tec.wrcoder.meucondominio.data.remote.dto.PollDto
-import br.tec.wrcoder.meucondominio.data.remote.dto.PollOptionDto
 import br.tec.wrcoder.meucondominio.data.remote.dto.VoteRequestDto
 import br.tec.wrcoder.meucondominio.data.sync.Entities
 import br.tec.wrcoder.meucondominio.data.sync.Ops
@@ -59,6 +58,7 @@ class RemotePollsRepository(
     private val bgScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val optionListSerializer = ListSerializer(PollOptionSerial.serializer())
     private val reconciled = mutableSetOf<String>()
+    private val votedCache = mutableSetOf<String>()
 
     @Serializable
     private data class PollOptionSerial(val id: String, val text: String)
@@ -66,8 +66,12 @@ class RemotePollsRepository(
     init {
         dispatcher.register(Entities.POLL, Ops.CREATE) { payload, _ ->
             val p = json.decodeFromString(CreatePollPayload.serializer(), payload)
-            persist(api.create(p.condominiumId,
-                CreatePollRequestDto(p.question, p.options, p.startsAt, p.endsAt)))
+            val dto = api.create(
+                p.condominiumId,
+                CreatePollRequestDto(p.question, p.options, p.startsAt, p.endsAt)
+            )
+            if (dto.id != p.id) db.pollQueries.deletePollById(p.id)
+            persist(dto)
         }
         dispatcher.register(Entities.POLL, Ops.CANCEL_STAFF) { payload, _ ->
             val p = json.decodeFromString(CancelPollPayload.serializer(), payload)
@@ -100,11 +104,12 @@ class RemotePollsRepository(
             createdByUserId = createdByUserId, createdAt = now.toEpoch(), updatedAt = now.toEpoch(),
             version = 0, deleted = 0,
         )
+        val optimistic = db.pollQueries.getPoll(id).executeAsOne().toDomain()
         dispatcher.enqueue(Entities.POLL, Ops.CREATE, id,
             json.encodeToString(CreatePollPayload.serializer(),
                 CreatePollPayload(id, condominiumId, question, options, startsAt.toString(), endsAt.toString())))
         if (network.isOnline.value) runCatching { dispatcher.drain() }
-        return AppResult.Success(db.pollQueries.getPoll(id).executeAsOne().toDomain())
+        return AppResult.Success(optimistic)
     }
 
     override suspend fun cancel(pollId: String): AppResult<Poll> {
@@ -126,14 +131,25 @@ class RemotePollsRepository(
     override suspend fun vote(pollId: String, optionId: String, userId: String): AppResult<Unit> {
         val now = clock.now().toEpoch()
         db.pollQueries.upsertVote(pollId, optionId, userId, now, now, 0, 0)
+        votedCache += "$pollId:$userId"
         dispatcher.enqueue(Entities.POLL_VOTE, Ops.VOTE, "$pollId:$userId",
             json.encodeToString(VotePayload.serializer(), VotePayload(pollId, optionId, userId)))
         if (network.isOnline.value) runCatching { dispatcher.drain() }
         return AppResult.Success(Unit)
     }
 
-    override suspend fun hasVoted(pollId: String, userId: String): Boolean =
-        db.pollQueries.hasVoted(pollId, userId).executeAsOne() > 0
+    override suspend fun hasVoted(pollId: String, userId: String): Boolean {
+        val cacheKey = "$pollId:$userId"
+        if (cacheKey in votedCache) return true
+        val localHas = db.pollQueries.hasVoted(pollId, userId).executeAsOne() > 0
+        if (localHas) {
+            votedCache += cacheKey; return true
+        }
+        if (!network.isOnline.value) return false
+        val remoteHas = runCatching { api.hasVoted(pollId).hasVoted }.getOrNull() ?: return false
+        if (remoteHas) votedCache += cacheKey
+        return remoteHas
+    }
 
     override suspend fun results(pollId: String): AppResult<PollResults> {
         if (network.isOnline.value) {
@@ -143,6 +159,7 @@ class RemotePollsRepository(
             }
         }
         val votes = db.pollQueries.listVotes(pollId).executeAsList()
+            .filter { it.optionId.isNotBlank() }
         val counts = votes.groupingBy { it.optionId }.eachCount().mapValues { it.value }
         return AppResult.Success(PollResults(pollId, votes.size, counts))
     }

@@ -33,7 +33,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -54,6 +57,7 @@ import org.koin.compose.viewmodel.koinViewModel
 fun FilesScreen(vm: FilesViewModel = koinViewModel(), navigator: AppNavigator = koinInject()) {
     val s by vm.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
+    var pendingDelete by remember { mutableStateOf<FileDoc?>(null) }
 
     val pdfLauncher = rememberFilePickerLauncher(
         type = PickerType.File(extensions = listOf("pdf")),
@@ -93,7 +97,7 @@ fun FilesScreen(vm: FilesViewModel = koinViewModel(), navigator: AppNavigator = 
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     items(s.files, key = { it.id }) { file ->
-                        FileCard(file, canManage = s.canManage, onDelete = { vm.delete(file) })
+                        FileCard(file, canManage = s.canManage, onDelete = { pendingDelete = file })
                     }
                 }
             }
@@ -152,6 +156,23 @@ fun FilesScreen(vm: FilesViewModel = koinViewModel(), navigator: AppNavigator = 
             confirmButton = { TextButton(onClick = vm::clearError) { Text("OK") } },
             title = { Text("Erro") },
             text = { Text(it) },
+        )
+    }
+
+    pendingDelete?.let { file ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("Excluir arquivo") },
+            text = { Text("Tem certeza que deseja excluir \"${file.title}\"? Esta ação não pode ser desfeita.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.delete(file)
+                    pendingDelete = null
+                }) { Text("Excluir") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) { Text("Cancelar") }
+            },
         )
     }
 }
