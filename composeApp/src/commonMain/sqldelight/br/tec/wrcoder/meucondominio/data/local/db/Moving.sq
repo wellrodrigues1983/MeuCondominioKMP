@@ -1,0 +1,36 @@
+CREATE TABLE IF NOT EXISTS moving_entity (
+    id TEXT NOT NULL PRIMARY KEY,
+    condominiumId TEXT NOT NULL,
+    unitId TEXT NOT NULL,
+    unitIdentifier TEXT NOT NULL,
+    residentUserId TEXT NOT NULL,
+    residentName TEXT NOT NULL,
+    scheduledForIso TEXT NOT NULL,
+    status TEXT NOT NULL,
+    createdAt INTEGER NOT NULL,
+    decisionReason TEXT,
+    decidedByUserId TEXT,
+    decidedAt INTEGER,
+    updatedAt INTEGER NOT NULL,
+    version INTEGER NOT NULL DEFAULT 0,
+    deleted INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS moving_entity_condominiumId_idx ON moving_entity(condominiumId);
+CREATE INDEX IF NOT EXISTS moving_entity_unitId_idx ON moving_entity(unitId);
+
+upsert:
+INSERT OR REPLACE INTO moving_entity(id, condominiumId, unitId, unitIdentifier, residentUserId, residentName, scheduledForIso, status, createdAt, decisionReason, decidedByUserId, decidedAt, updatedAt, version, deleted)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+observeByCondominium:
+SELECT * FROM moving_entity WHERE condominiumId = ? AND deleted = 0 ORDER BY scheduledForIso DESC;
+
+observeByUnit:
+SELECT * FROM moving_entity WHERE unitId = ? AND deleted = 0 ORDER BY scheduledForIso DESC;
+
+get:
+SELECT * FROM moving_entity WHERE id = ?;
+
+lastUpdatedAt:
+SELECT MAX(updatedAt) FROM moving_entity WHERE condominiumId = ?;

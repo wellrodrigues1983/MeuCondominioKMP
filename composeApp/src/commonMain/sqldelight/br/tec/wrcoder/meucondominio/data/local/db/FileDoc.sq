@@ -1,0 +1,28 @@
+CREATE TABLE IF NOT EXISTS file_entity (
+    id TEXT NOT NULL PRIMARY KEY,
+    condominiumId TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    fileUrl TEXT NOT NULL,
+    sizeBytes INTEGER NOT NULL,
+    uploadedByUserId TEXT NOT NULL,
+    uploadedAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL,
+    version INTEGER NOT NULL DEFAULT 0,
+    deleted INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS file_entity_condominiumId_idx ON file_entity(condominiumId);
+
+upsert:
+INSERT OR REPLACE INTO file_entity(id, condominiumId, title, description, fileUrl, sizeBytes, uploadedByUserId, uploadedAt, updatedAt, version, deleted)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+observe:
+SELECT * FROM file_entity WHERE condominiumId = ? AND deleted = 0 ORDER BY uploadedAt DESC;
+
+get:
+SELECT * FROM file_entity WHERE id = ?;
+
+lastUpdatedAt:
+SELECT MAX(updatedAt) FROM file_entity WHERE condominiumId = ?;

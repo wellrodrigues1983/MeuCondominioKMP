@@ -1,0 +1,30 @@
+CREATE TABLE IF NOT EXISTS notice_entity (
+    id TEXT NOT NULL PRIMARY KEY,
+    condominiumId TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    authorId TEXT NOT NULL,
+    authorName TEXT NOT NULL,
+    createdAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL,
+    version INTEGER NOT NULL DEFAULT 0,
+    deleted INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS notice_entity_condominiumId_idx ON notice_entity(condominiumId);
+
+upsert:
+INSERT OR REPLACE INTO notice_entity(id, condominiumId, title, description, authorId, authorName, createdAt, updatedAt, version, deleted)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+observe:
+SELECT * FROM notice_entity WHERE condominiumId = ? AND deleted = 0 ORDER BY createdAt DESC;
+
+get:
+SELECT * FROM notice_entity WHERE id = ?;
+
+softDelete:
+UPDATE notice_entity SET deleted = 1, updatedAt = ? WHERE id = ?;
+
+lastUpdatedAt:
+SELECT MAX(updatedAt) FROM notice_entity WHERE condominiumId = ?;

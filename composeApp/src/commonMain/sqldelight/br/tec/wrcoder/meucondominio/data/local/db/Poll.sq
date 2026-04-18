@@ -1,0 +1,50 @@
+CREATE TABLE IF NOT EXISTS poll_entity (
+    id TEXT NOT NULL PRIMARY KEY,
+    condominiumId TEXT NOT NULL,
+    question TEXT NOT NULL,
+    optionsJson TEXT NOT NULL,
+    startsAt INTEGER NOT NULL,
+    endsAt INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    createdByUserId TEXT NOT NULL,
+    createdAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL,
+    version INTEGER NOT NULL DEFAULT 0,
+    deleted INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS poll_entity_condominiumId_idx ON poll_entity(condominiumId);
+
+CREATE TABLE IF NOT EXISTS poll_vote_entity (
+    pollId TEXT NOT NULL,
+    optionId TEXT NOT NULL,
+    userId TEXT NOT NULL,
+    castedAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL,
+    version INTEGER NOT NULL DEFAULT 0,
+    deleted INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (pollId, userId)
+);
+
+upsertPoll:
+INSERT OR REPLACE INTO poll_entity(id, condominiumId, question, optionsJson, startsAt, endsAt, status, createdByUserId, createdAt, updatedAt, version, deleted)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+observePolls:
+SELECT * FROM poll_entity WHERE condominiumId = ? AND deleted = 0 ORDER BY createdAt DESC;
+
+getPoll:
+SELECT * FROM poll_entity WHERE id = ?;
+
+lastPollUpdatedAt:
+SELECT MAX(updatedAt) FROM poll_entity WHERE condominiumId = ?;
+
+upsertVote:
+INSERT OR REPLACE INTO poll_vote_entity(pollId, optionId, userId, castedAt, updatedAt, version, deleted)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+listVotes:
+SELECT * FROM poll_vote_entity WHERE pollId = ? AND deleted = 0;
+
+hasVoted:
+SELECT COUNT(*) FROM poll_vote_entity WHERE pollId = ? AND userId = ? AND deleted = 0;

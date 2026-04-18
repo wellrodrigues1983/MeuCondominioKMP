@@ -1,0 +1,32 @@
+CREATE TABLE IF NOT EXISTS listing_entity (
+    id TEXT NOT NULL PRIMARY KEY,
+    condominiumId TEXT NOT NULL,
+    authorUserId TEXT NOT NULL,
+    authorName TEXT NOT NULL,
+    unitIdentifier TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    price REAL,
+    imageUrlsJson TEXT NOT NULL,
+    status TEXT NOT NULL,
+    createdAt INTEGER NOT NULL,
+    expiresAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL,
+    version INTEGER NOT NULL DEFAULT 0,
+    deleted INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS listing_entity_condominiumId_idx ON listing_entity(condominiumId);
+
+upsert:
+INSERT OR REPLACE INTO listing_entity(id, condominiumId, authorUserId, authorName, unitIdentifier, title, description, price, imageUrlsJson, status, createdAt, expiresAt, updatedAt, version, deleted)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+observe:
+SELECT * FROM listing_entity WHERE condominiumId = ? AND deleted = 0 ORDER BY createdAt DESC;
+
+get:
+SELECT * FROM listing_entity WHERE id = ?;
+
+lastUpdatedAt:
+SELECT MAX(updatedAt) FROM listing_entity WHERE condominiumId = ?;

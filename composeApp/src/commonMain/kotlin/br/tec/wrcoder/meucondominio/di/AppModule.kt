@@ -2,10 +2,28 @@ package br.tec.wrcoder.meucondominio.di
 
 import br.tec.wrcoder.meucondominio.core.AppClock
 import br.tec.wrcoder.meucondominio.core.BinaryStore
+import br.tec.wrcoder.meucondominio.core.BuildConfig
 import br.tec.wrcoder.meucondominio.core.SystemAppClock
+import br.tec.wrcoder.meucondominio.core.network.NetworkMonitor
+import br.tec.wrcoder.meucondominio.core.network.createNetworkMonitor
 import br.tec.wrcoder.meucondominio.core.storage.SecureStorage
+import br.tec.wrcoder.meucondominio.core.storage.TokenStore
 import br.tec.wrcoder.meucondominio.core.storage.createSecureStorage
+import br.tec.wrcoder.meucondominio.data.local.db.DatabaseDriverFactory
+import br.tec.wrcoder.meucondominio.data.local.db.MeuCondominioDb
+import br.tec.wrcoder.meucondominio.data.remote.ApiJson
+import br.tec.wrcoder.meucondominio.data.remote.AuthApiService
+import br.tec.wrcoder.meucondominio.data.remote.ChatApiService
 import br.tec.wrcoder.meucondominio.data.remote.CondoApiClient
+import br.tec.wrcoder.meucondominio.data.remote.CondominiumApiService
+import br.tec.wrcoder.meucondominio.data.remote.FilesApiService
+import br.tec.wrcoder.meucondominio.data.remote.ListingsApiService
+import br.tec.wrcoder.meucondominio.data.remote.MovingsApiService
+import br.tec.wrcoder.meucondominio.data.remote.NoticesApiService
+import br.tec.wrcoder.meucondominio.data.remote.PackagesApiService
+import br.tec.wrcoder.meucondominio.data.remote.PollsApiService
+import br.tec.wrcoder.meucondominio.data.remote.SpacesApiService
+import br.tec.wrcoder.meucondominio.data.remote.UploadsApiService
 import br.tec.wrcoder.meucondominio.data.remote.createHttpClient
 import br.tec.wrcoder.meucondominio.data.repository.FakeAuthRepository
 import br.tec.wrcoder.meucondominio.data.repository.FakeChatRepository
@@ -20,6 +38,18 @@ import br.tec.wrcoder.meucondominio.data.repository.FakeSpaceRepository
 import br.tec.wrcoder.meucondominio.data.repository.InMemoryStore
 import br.tec.wrcoder.meucondominio.data.repository.LoggingNotificationsRepository
 import br.tec.wrcoder.meucondominio.data.repository.SampleDataSeeder
+import br.tec.wrcoder.meucondominio.data.repository.remote.RemoteAuthRepository
+import br.tec.wrcoder.meucondominio.data.repository.remote.RemoteChatRepository
+import br.tec.wrcoder.meucondominio.data.repository.remote.RemoteCondominiumRepository
+import br.tec.wrcoder.meucondominio.data.repository.remote.RemoteFilesRepository
+import br.tec.wrcoder.meucondominio.data.repository.remote.RemoteListingsRepository
+import br.tec.wrcoder.meucondominio.data.repository.remote.RemoteMovingsRepository
+import br.tec.wrcoder.meucondominio.data.repository.remote.RemoteNoticesRepository
+import br.tec.wrcoder.meucondominio.data.repository.remote.RemotePackagesRepository
+import br.tec.wrcoder.meucondominio.data.repository.remote.RemotePollsRepository
+import br.tec.wrcoder.meucondominio.data.repository.remote.RemoteSpacesRepository
+import br.tec.wrcoder.meucondominio.data.sync.OutboxDispatcher
+import br.tec.wrcoder.meucondominio.data.sync.SyncEngine
 import br.tec.wrcoder.meucondominio.domain.repository.AuthRepository
 import br.tec.wrcoder.meucondominio.domain.repository.ChatRepository
 import br.tec.wrcoder.meucondominio.domain.repository.CondominiumRepository
@@ -59,23 +89,55 @@ import org.koin.dsl.module
 fun commonModule(): Module = module {
     single<AppClock> { SystemAppClock() }
     single<SecureStorage> { createSecureStorage() }
+    single { TokenStore(get()) }
     single { BinaryStore() }
-    single { InMemoryStore().also { SampleDataSeeder.seed(it, get()) } }
+    single { ApiJson }
 
+    single<NetworkMonitor> { createNetworkMonitor() }
     single { createHttpClient(get()) }
     single { CondoApiClient(get()) }
 
-    singleOf(::FakeAuthRepository) bind AuthRepository::class
-    singleOf(::FakeCondominiumRepository) bind CondominiumRepository::class
-    singleOf(::FakeNoticeRepository) bind NoticeRepository::class
-    singleOf(::FakePackageRepository) bind PackageRepository::class
-    singleOf(::FakeSpaceRepository) bind SpaceRepository::class
-    singleOf(::FakeListingRepository) bind ListingRepository::class
+    single { AuthApiService(get()) }
+    single { CondominiumApiService(get()) }
+    single { NoticesApiService(get()) }
+    single { SpacesApiService(get()) }
+    single { ListingsApiService(get()) }
+    single { MovingsApiService(get()) }
+    single { FilesApiService(get()) }
+    single { PollsApiService(get()) }
+    single { PackagesApiService(get()) }
+    single { ChatApiService(get()) }
+    single { UploadsApiService(get()) }
+
+    single { MeuCondominioDb(get<DatabaseDriverFactory>().create()) }
+    single { OutboxDispatcher(get(), get()) }
+    single { SyncEngine(get(), get()).also { if (!BuildConfig.USE_FAKE) it.start() } }
+
+    if (BuildConfig.USE_FAKE) {
+        single { InMemoryStore().also { SampleDataSeeder.seed(it, get()) } }
+        singleOf(::FakeAuthRepository) bind AuthRepository::class
+        singleOf(::FakeCondominiumRepository) bind CondominiumRepository::class
+        singleOf(::FakeNoticeRepository) bind NoticeRepository::class
+        singleOf(::FakePackageRepository) bind PackageRepository::class
+        singleOf(::FakeSpaceRepository) bind SpaceRepository::class
+        singleOf(::FakeListingRepository) bind ListingRepository::class
+        singleOf(::FakeMovingRepository) bind MovingRepository::class
+        singleOf(::FakeFilesRepository) bind FilesRepository::class
+        singleOf(::FakePollsRepository) bind PollsRepository::class
+        singleOf(::FakeChatRepository) bind ChatRepository::class
+    } else {
+        single<AuthRepository> { RemoteAuthRepository(get(), get(), get()) }
+        single<CondominiumRepository> { RemoteCondominiumRepository(get(), get(), get()) }
+        single<NoticeRepository> { RemoteNoticesRepository(get(), get(), get(), get(), get(), get()) }
+        single<SpaceRepository> { RemoteSpacesRepository(get(), get(), get(), get(), get(), get()) }
+        single<ListingRepository> { RemoteListingsRepository(get(), get(), get(), get(), get(), get()) }
+        single<MovingRepository> { RemoteMovingsRepository(get(), get(), get(), get(), get(), get()) }
+        single<FilesRepository> { RemoteFilesRepository(get(), get(), get(), get()) }
+        single<PollsRepository> { RemotePollsRepository(get(), get(), get(), get(), get(), get()) }
+        single<PackageRepository> { RemotePackagesRepository(get(), get(), get(), get(), get(), get()) }
+        single<ChatRepository> { RemoteChatRepository(get(), get(), get(), get(), get(), get()) }
+    }
     singleOf(::LoggingNotificationsRepository) bind NotificationsRepository::class
-    singleOf(::FakeMovingRepository) bind MovingRepository::class
-    singleOf(::FakeFilesRepository) bind FilesRepository::class
-    singleOf(::FakePollsRepository) bind PollsRepository::class
-    singleOf(::FakeChatRepository) bind ChatRepository::class
 
     factoryOf(::CancelReservationUseCase)
     factoryOf(::RenewListingUseCase)

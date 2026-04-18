@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -7,6 +8,36 @@ plugins {
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.kotlinSerialization)
     alias(libs.plugins.sqldelight)
+}
+
+val localProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+val apiBaseUrl: String = (localProps["api.baseUrl"] as String?) ?: "https://api.meucondominio.example/v1"
+val useFake: Boolean = ((localProps["app.useFake"] as String?) ?: "true").toBoolean()
+
+val generatedBuildConfigDir = layout.buildDirectory.dir("generated/buildconfig/commonMain/kotlin")
+
+val generateBuildConfig = tasks.register("generateBuildConfig") {
+    val outDir = generatedBuildConfigDir
+    val base = apiBaseUrl
+    val fake = useFake
+    outputs.dir(outDir)
+    doLast {
+        val pkgDir = outDir.get().asFile.resolve("br/tec/wrcoder/meucondominio/core")
+        pkgDir.mkdirs()
+        pkgDir.resolve("BuildConfig.kt").writeText(
+            """
+            package br.tec.wrcoder.meucondominio.core
+
+            object BuildConfig {
+                const val API_BASE_URL: String = "$base"
+                const val USE_FAKE: Boolean = $fake
+            }
+            """.trimIndent()
+        )
+    }
 }
 
 kotlin {
@@ -27,6 +58,9 @@ kotlin {
     }
 
     sourceSets {
+        commonMain {
+            kotlin.srcDir(generatedBuildConfigDir)
+        }
         androidMain.dependencies {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.activity.compose)
@@ -115,6 +149,13 @@ sqldelight {
             packageName.set("br.tec.wrcoder.meucondominio.data.local.db")
         }
     }
+}
+
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask<*>>().configureEach {
+    dependsOn(generateBuildConfig)
+}
+tasks.matching { it.name.endsWith("SourcesJar") }.configureEach {
+    dependsOn(generateBuildConfig)
 }
 
 dependencies {

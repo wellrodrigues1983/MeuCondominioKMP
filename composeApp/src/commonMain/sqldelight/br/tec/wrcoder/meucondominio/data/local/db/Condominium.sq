@@ -1,0 +1,49 @@
+CREATE TABLE IF NOT EXISTS condominium_entity (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    address TEXT NOT NULL,
+    code TEXT NOT NULL,
+    createdAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL,
+    version INTEGER NOT NULL DEFAULT 0,
+    deleted INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS unit_entity (
+    id TEXT NOT NULL PRIMARY KEY,
+    condominiumId TEXT NOT NULL,
+    identifier TEXT NOT NULL,
+    block TEXT,
+    ownerUserId TEXT,
+    updatedAt INTEGER NOT NULL,
+    version INTEGER NOT NULL DEFAULT 0,
+    deleted INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS unit_entity_condominiumId_idx ON unit_entity(condominiumId);
+
+upsertCondominium:
+INSERT OR REPLACE INTO condominium_entity(id, name, address, code, createdAt, updatedAt, version, deleted)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+getCondominium:
+SELECT * FROM condominium_entity WHERE id = ? AND deleted = 0;
+
+getCondominiumByCode:
+SELECT * FROM condominium_entity WHERE code = ? AND deleted = 0;
+
+upsertUnit:
+INSERT OR REPLACE INTO unit_entity(id, condominiumId, identifier, block, ownerUserId, updatedAt, version, deleted)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+listUnits:
+SELECT * FROM unit_entity WHERE condominiumId = ? AND deleted = 0 ORDER BY identifier;
+
+getUnit:
+SELECT * FROM unit_entity WHERE id = ? AND deleted = 0;
+
+findUnitByIdentifier:
+SELECT * FROM unit_entity WHERE condominiumId = ? AND identifier = ? AND deleted = 0 LIMIT 1;
+
+deleteUnit:
+UPDATE unit_entity SET deleted = 1, updatedAt = ? WHERE id = ?;

@@ -1,0 +1,1889 @@
+openapi: 3.1.0
+info:
+  title: Meu Condomínio API
+  version: "1.0.0"
+  description: |
+    API REST do aplicativo **Meu Condomínio** (Kotlin Multiplatform, Compose).
+    Atende clientes mobile (Android/iOS) e web com suporte a sincronização
+    incremental, autenticação JWT e cenários offline-first.
+
+    Todos os endpoints estão sob o prefixo `/v1`.
+  contact:
+    name: Equipe Meu Condomínio
+    email: wellrodrigues@gmail.com
+  license:
+    name: Proprietária
+servers:
+  - url: https://api.meucondominio.app/v1
+    description: Produção
+  - url: https://staging.api.meucondominio.app/v1
+    description: Staging
+  - url: http://localhost:8080/v1
+    description: Desenvolvimento local
+
+tags:
+  - name: Auth
+    description: Autenticação e gestão de sessão
+  - name: Me
+    description: Perfil do usuário autenticado
+  - name: Condominiums
+    description: Condomínios e unidades
+  - name: Users
+    description: Usuários e membros de unidade
+  - name: Notices
+    description: Avisos / comunicados
+  - name: Packages
+    description: Encomendas e descrições padrão
+  - name: Spaces
+    description: Espaços comuns e reservas
+  - name: Listings
+    description: Anúncios de moradores
+  - name: Movings
+    description: Solicitações de mudança
+  - name: Files
+    description: Arquivos (PDFs) do condomínio
+  - name: Polls
+    description: Enquetes e votação
+  - name: Chat
+    description: Threads e mensagens de chat
+  - name: Uploads
+    description: Upload de imagens e arquivos
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ---------------------------------------------------------------------------
+  # AUTH
+  # ---------------------------------------------------------------------------
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Autentica usuário por email e senha
+      description: |
+        Retorna `accessToken` (TTL ~15 min) e `refreshToken` (TTL ~30 dias),
+        além dos dados do usuário. Os tokens devem ser armazenados com segurança
+        no dispositivo (Keychain / EncryptedSharedPreferences).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login bem-sucedido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokensResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/Validation' }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Troca um refresh token válido por um novo par de tokens
+      description: |
+        Deve ser chamado sempre que a resposta da API retornar `401 TOKEN_EXPIRED`.
+        Invalida o refresh token anterior (rotação).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '200':
+          description: Novos tokens
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accessToken, refreshToken]
+                properties:
+                  accessToken: { type: string }
+                  refreshToken: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/register-condominium:
+    post:
+      tags: [Auth]
+      summary: Cria um condomínio e o usuário admin inicial
+      description: |
+        Operação combinada: cria `Condominium`, gera `code` único (p.ex. 6-8
+        caracteres alfanuméricos) e cria o primeiro `User` com role `ADMIN`
+        vinculado a ele. Retorna tokens autenticados.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterCondominiumRequest'
+      responses:
+        '201':
+          description: Condomínio e admin criados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokensResponse'
+        '422': { $ref: '#/components/responses/Validation' }
+
+  /auth/join-condominium:
+    post:
+      tags: [Auth]
+      summary: Morador entra em uma unidade existente
+      description: |
+        Valida `condoCode` + `unitIdentifier`, cria usuário com role `RESIDENT`
+        vinculado à unidade e retorna tokens autenticados.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JoinCondominiumRequest'
+      responses:
+        '201':
+          description: Usuário criado e logado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokensResponse'
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Invalida o refresh token e a sessão
+      description: |
+        Revoga o refresh token associado à requisição. O cliente deve também
+        apagar os tokens localmente.
+      responses:
+        '204':
+          description: Logout efetuado
+
+  /me:
+    get:
+      tags: [Me]
+      summary: Retorna o usuário autenticado
+      responses:
+        '200':
+          description: Usuário
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /me/avatar:
+    patch:
+      tags: [Me]
+      summary: Atualiza o avatar do usuário autenticado
+      description: |
+        Envie `image` como multipart. Tipos aceitos: `image/jpeg`, `image/png`,
+        `image/webp`. Máx. 5 MB. Para remover o avatar envie sem campo.
+      requestBody:
+        required: false
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                image:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Avatar atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '413': { $ref: '#/components/responses/Validation' }
+        '422': { $ref: '#/components/responses/Validation' }
+
+  # ---------------------------------------------------------------------------
+  # CONDOMINIUMS & UNITS
+  # ---------------------------------------------------------------------------
+  /condominiums/by-code/{code}:
+    get:
+      tags: [Condominiums]
+      summary: Busca condomínio pelo código público
+      description: |
+        Usado durante o fluxo de "entrar em condomínio". **Acessível a qualquer
+        usuário autenticado** — retorna apenas dados públicos (sem lista de
+        membros).
+      parameters:
+        - in: path
+          name: code
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Condomínio
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Condominium' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /condominiums/{id}:
+    get:
+      tags: [Condominiums]
+      summary: Detalhes do condomínio
+      description: Requer pertencimento ao condomínio.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Condomínio
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Condominium' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /condominiums/{id}/units:
+    get:
+      tags: [Condominiums]
+      summary: Lista unidades do condomínio
+      description: Requer pertencimento ao condomínio (qualquer role).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/UpdatedSince'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Página de unidades
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnitPage'
+    post:
+      tags: [Condominiums]
+      summary: Cria uma unidade
+      description: "Permissão: **ADMIN**."
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identifier]
+              properties:
+                identifier: { type: string, example: "101-A" }
+                block:      { type: string, nullable: true }
+      responses:
+        '201':
+          description: Unidade criada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CondoUnit' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Validation' }
+
+  /condominiums/{id}/units/by-identifier/{identifier}:
+    get:
+      tags: [Condominiums]
+      summary: Busca unidade por identificador textual
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - in: path
+          name: identifier
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Unidade
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CondoUnit' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---------------------------------------------------------------------------
+  # UNIT MEMBERS / USERS
+  # ---------------------------------------------------------------------------
+  /units/{unitId}/members:
+    get:
+      tags: [Users]
+      summary: Lista membros de uma unidade
+      description: |
+        Acessível a qualquer membro da unidade ou staff (ADMIN/SUPERVISOR) do
+        condomínio pai.
+      parameters:
+        - $ref: '#/components/parameters/PathUnitId'
+      responses:
+        '200':
+          description: Lista de usuários
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/User' }
+    post:
+      tags: [Users]
+      summary: Cria um morador adicional na unidade
+      description: |
+        Permissão: membro existente da unidade (`UNIT_MEMBER_MANAGE`) ou
+        ADMIN/SUPERVISOR. Cria usuário com role `RESIDENT`.
+      parameters:
+        - $ref: '#/components/parameters/PathUnitId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMemberRequest'
+      responses:
+        '201':
+          description: Membro criado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Validation' }
+
+  /users/{id}:
+    patch:
+      tags: [Users]
+      summary: Atualiza dados de um usuário
+      description: |
+        Permissão: **ADMIN** ou **SUPERVISOR**. O próprio usuário pode alterar
+        seu nome/telefone. Não permite alterar role exceto por ADMIN.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:  { type: string }
+                phone: { type: string, nullable: true }
+                role:
+                  type: string
+                  enum: [ADMIN, SUPERVISOR, RESIDENT]
+                unitId:
+                  type: string
+                  format: uuid
+                  nullable: true
+      responses:
+        '200':
+          description: Usuário atualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+
+  # ---------------------------------------------------------------------------
+  # NOTICES
+  # ---------------------------------------------------------------------------
+  /condominiums/{condoId}/notices:
+    get:
+      tags: [Notices]
+      summary: Lista avisos do condomínio
+      description: Qualquer membro do condomínio pode listar.
+      parameters:
+        - $ref: '#/components/parameters/PathCondoId'
+        - $ref: '#/components/parameters/UpdatedSince'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Página de avisos
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NoticePage' }
+    post:
+      tags: [Notices]
+      summary: Cria um aviso
+      description: "Permissão: **ADMIN** ou **SUPERVISOR** (`NOTICE_MANAGE`)."
+      parameters:
+        - $ref: '#/components/parameters/PathCondoId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, description]
+              properties:
+                title:       { type: string, maxLength: 200 }
+                description: { type: string }
+      responses:
+        '201':
+          description: Aviso criado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Notice' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /notices/{id}:
+    patch:
+      tags: [Notices]
+      summary: Atualiza um aviso
+      description: "Permissão: **ADMIN** ou **SUPERVISOR**."
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:       { type: string }
+                description: { type: string }
+      responses:
+        '200':
+          description: Aviso atualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Notice' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Notices]
+      summary: Remove um aviso (soft delete)
+      description: "Permissão: **ADMIN** ou **SUPERVISOR**. Gera tombstone para sincronização."
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '204': { description: Removido }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ---------------------------------------------------------------------------
+  # PACKAGES
+  # ---------------------------------------------------------------------------
+  /condominiums/{condoId}/packages:
+    get:
+      tags: [Packages]
+      summary: Lista encomendas do condomínio
+      description: "Permissão: **ADMIN** ou **SUPERVISOR** (visão geral da portaria)."
+      parameters:
+        - $ref: '#/components/parameters/PathCondoId'
+        - $ref: '#/components/parameters/UpdatedSince'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [RECEIVED, PICKED_UP]
+      responses:
+        '200':
+          description: Página de encomendas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PackagePage' }
+    post:
+      tags: [Packages]
+      summary: Registra nova encomenda
+      description: "Permissão: **ADMIN** ou **SUPERVISOR** (`PACKAGE_REGISTER`)."
+      parameters:
+        - $ref: '#/components/parameters/PathCondoId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [unitId, description]
+              properties:
+                unitId:      { type: string, format: uuid }
+                description: { type: string }
+                carrier:     { type: string, nullable: true }
+      responses:
+        '201':
+          description: Encomenda registrada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PackageItem' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /units/{unitId}/packages:
+    get:
+      tags: [Packages]
+      summary: Lista encomendas de uma unidade
+      description: Morador da unidade ou staff.
+      parameters:
+        - $ref: '#/components/parameters/PathUnitId'
+        - $ref: '#/components/parameters/UpdatedSince'
+      responses:
+        '200':
+          description: Lista
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PackagePage' }
+
+  /packages/{id}/pickup:
+    post:
+      tags: [Packages]
+      summary: Marca encomenda como retirada
+      description: "Permissão: **ADMIN** ou **SUPERVISOR** (registro físico na portaria)."
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Encomenda retirada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PackageItem' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /condominiums/{condoId}/package-descriptions:
+    get:
+      tags: [Packages]
+      summary: Lista descrições padrão de encomendas
+      parameters:
+        - $ref: '#/components/parameters/PathCondoId'
+      responses:
+        '200':
+          description: Lista
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PackageDescription' }
+    post:
+      tags: [Packages]
+      summary: Cria descrição padrão
+      description: "Permissão: **ADMIN** ou **SUPERVISOR**."
+      parameters:
+        - $ref: '#/components/parameters/PathCondoId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: { type: string }
+      responses:
+        '201':
+          description: Criada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PackageDescription' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ---------------------------------------------------------------------------
+  # SPACES & RESERVATIONS
+  # ---------------------------------------------------------------------------
+  /condominiums/{condoId}/spaces:
+    get:
+      tags: [Spaces]
+      summary: Lista espaços comuns
+      parameters:
+        - $ref: '#/components/parameters/PathCondoId'
+        - $ref: '#/components/parameters/UpdatedSince'
+      responses:
+        '200':
+          description: Lista
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CommonSpacePage' }
+    post:
+      tags: [Spaces]
+      summary: Cria espaço comum (com imagens opcionais)
+      description: |
+        Permissão: **ADMIN** (`SPACE_MANAGE`). Aceita `application/json` ou
+        `multipart/form-data` com `images[]` (até 10 arquivos de 5 MB cada).
+      parameters:
+        - $ref: '#/components/parameters/PathCondoId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSpaceRequest' }
+          multipart/form-data:
+            schema:
+              type: object
+              required: [name, description, price]
+              properties:
+                name:        { type: string }
+                description: { type: string }
+                price:       { type: number, format: double }
+                images:
+                  type: array
+                  items: { type: string, format: binary }
+      responses:
+        '201':
+          description: Espaço criado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CommonSpace' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /spaces/{id}:
+    patch:
+      tags: [Spaces]
+      summary: Atualiza espaço
+      description: "Permissão: **ADMIN**."
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:        { type: string }
+                description: { type: string }
+                price:       { type: number, format: double }
+                imageUrls:
+                  type: array
+                  items: { type: string, format: uri }
+                active:      { type: boolean }
+      responses:
+        '200':
+          description: Atualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CommonSpace' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    delete:
+      tags: [Spaces]
+      summary: Remove espaço (soft delete)
+      description: "Permissão: **ADMIN**. Marca `active=false` e gera tombstone."
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '204': { description: Removido }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /spaces/{spaceId}/reservations:
+    get:
+      tags: [Spaces]
+      summary: Lista reservas do espaço
+      parameters:
+        - in: path
+          name: spaceId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: from
+          schema: { type: string, format: date }
+          description: Data inicial (YYYY-MM-DD)
+        - in: query
+          name: to
+          schema: { type: string, format: date }
+          description: Data final (YYYY-MM-DD)
+        - $ref: '#/components/parameters/UpdatedSince'
+      responses:
+        '200':
+          description: Lista
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReservationPage' }
+    post:
+      tags: [Spaces]
+      summary: Cria reserva de espaço
+      description: |
+        Permissão: **RESIDENT** da unidade informada (`RESERVATION_CREATE`).
+        Backend valida que `date` não colide com outra reserva `CONFIRMED`.
+      parameters:
+        - in: path
+          name: spaceId
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [unitId, date]
+              properties:
+                unitId: { type: string, format: uuid }
+                date:   { type: string, format: date }
+      responses:
+        '201':
+          description: Reserva criada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reservation' }
+        '409':
+          description: Data já reservada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /units/{unitId}/reservations:
+    get:
+      tags: [Spaces]
+      summary: Lista reservas feitas por uma unidade
+      parameters:
+        - $ref: '#/components/parameters/PathUnitId'
+        - $ref: '#/components/parameters/UpdatedSince'
+      responses:
+        '200':
+          description: Lista
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReservationPage' }
+
+  /reservations/{id}/cancel-by-resident:
+    post:
+      tags: [Spaces]
+      summary: Cancela reserva (pelo morador)
+      description: |
+        Permissão: o morador que reservou. Backend valida o prazo (regra
+        configurável por condomínio — após o prazo retorna `403 DEADLINE_PASSED`
+        e o cancelamento deve ser feito via `cancel-by-staff`).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Cancelada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reservation' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /reservations/{id}/cancel-by-staff:
+    post:
+      tags: [Spaces]
+      summary: Cancela reserva (pela administração)
+      description: "Permissão: **ADMIN** ou **SUPERVISOR** (`RESERVATION_CANCEL_AFTER_DEADLINE`)."
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        '200':
+          description: Cancelada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reservation' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ---------------------------------------------------------------------------
+  # LISTINGS
+  # ---------------------------------------------------------------------------
+  /condominiums/{condoId}/listings:
+    get:
+      tags: [Listings]
+      summary: Lista anúncios do condomínio
+      parameters:
+        - $ref: '#/components/parameters/PathCondoId'
+        - $ref: '#/components/parameters/UpdatedSince'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [ACTIVE, CLOSED, EXPIRED]
+      responses:
+        '200':
+          description: Página
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ListingPage' }
+    post:
+      tags: [Listings]
+      summary: Cria anúncio
+      description: |
+        Permissão: **RESIDENT** (`LISTING_CREATE`). Use `multipart/form-data`
+        para enviar imagens (até 6 arquivos de 5 MB cada) ou `application/json`
+        se o cliente já subiu as imagens via `/uploads/images` e está passando
+        `imageUrls`.
+      parameters:
+        - $ref: '#/components/parameters/PathCondoId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateListingRequest' }
+          multipart/form-data:
+            schema:
+              type: object
+              required: [title, description]
+              properties:
+                title:       { type: string }
+                description: { type: string }
+                price:       { type: number, format: double, nullable: true }
+                images:
+                  type: array
+                  items: { type: string, format: binary }
+      responses:
+        '201':
+          description: Anúncio criado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Listing' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /listings/{id}/close:
+    post:
+      tags: [Listings]
+      summary: Encerra anúncio
+      description: Permissão: autor do anúncio ou **ADMIN**.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Anúncio encerrado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Listing' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /listings/{id}/renew:
+    post:
+      tags: [Listings]
+      summary: Renova anúncio (estende `expiresAt`)
+      description: Permissão: autor do anúncio.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Anúncio renovado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Listing' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ---------------------------------------------------------------------------
+  # MOVINGS
+  # ---------------------------------------------------------------------------
+  /condominiums/{condoId}/movings:
+    get:
+      tags: [Movings]
+      summary: Lista solicitações de mudança do condomínio
+      description: "Permissão: **ADMIN** ou **SUPERVISOR**."
+      parameters:
+        - $ref: '#/components/parameters/PathCondoId'
+        - $ref: '#/components/parameters/UpdatedSince'
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [PENDING, APPROVED, REJECTED, CANCELLED]
+      responses:
+        '200':
+          description: Lista
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MovingPage' }
+    post:
+      tags: [Movings]
+      summary: Cria solicitação de mudança
+      description: "Permissão: **RESIDENT** (`MOVING_REQUEST_CREATE`)."
+      parameters:
+        - $ref: '#/components/parameters/PathCondoId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [unitId, scheduledFor]
+              properties:
+                unitId: { type: string, format: uuid }
+                scheduledFor:
+                  type: string
+                  description: LocalDateTime sem timezone (YYYY-MM-DDTHH:MM:SS)
+                  example: "2026-05-02T14:00:00"
+      responses:
+        '201':
+          description: Solicitação criada (status PENDING)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MovingRequest' }
+
+  /units/{unitId}/movings:
+    get:
+      tags: [Movings]
+      summary: Lista mudanças de uma unidade
+      parameters:
+        - $ref: '#/components/parameters/PathUnitId'
+        - $ref: '#/components/parameters/UpdatedSince'
+      responses:
+        '200':
+          description: Lista
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MovingPage' }
+
+  /movings/{id}/approve:
+    post:
+      tags: [Movings]
+      summary: Aprova mudança
+      description: "Permissão: **ADMIN** ou **SUPERVISOR** (`MOVING_REQUEST_DECIDE`)."
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Aprovada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MovingRequest' }
+
+  /movings/{id}/reject:
+    post:
+      tags: [Movings]
+      summary: Rejeita mudança
+      description: "Permissão: **ADMIN** ou **SUPERVISOR**."
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        '200':
+          description: Rejeitada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MovingRequest' }
+
+  /movings/{id}/cancel-by-staff:
+    post:
+      tags: [Movings]
+      summary: Cancela mudança (staff)
+      description: "Permissão: **ADMIN** ou **SUPERVISOR**."
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        '200':
+          description: Cancelada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MovingRequest' }
+
+  # ---------------------------------------------------------------------------
+  # FILES
+  # ---------------------------------------------------------------------------
+  /condominiums/{condoId}/files:
+    get:
+      tags: [Files]
+      summary: Lista arquivos (PDFs) do condomínio
+      parameters:
+        - $ref: '#/components/parameters/PathCondoId'
+        - $ref: '#/components/parameters/UpdatedSince'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Página
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FileDocPage' }
+    post:
+      tags: [Files]
+      summary: Envia novo arquivo
+      description: |
+        Permissão: **ADMIN** (`FILE_MANAGE`). Use `multipart/form-data` com
+        campos `file` (PDF, máx. 20 MB), `title` e `description` opcional.
+      parameters:
+        - $ref: '#/components/parameters/PathCondoId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, title]
+              properties:
+                file:        { type: string, format: binary }
+                title:       { type: string }
+                description: { type: string, nullable: true }
+      responses:
+        '201':
+          description: Arquivo criado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FileDoc' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { $ref: '#/components/responses/Validation' }
+
+  /files/{id}:
+    delete:
+      tags: [Files]
+      summary: Remove arquivo
+      description: "Permissão: **ADMIN**. Tombstone + remoção do binário em job assíncrono."
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '204': { description: Removido }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ---------------------------------------------------------------------------
+  # POLLS
+  # ---------------------------------------------------------------------------
+  /condominiums/{condoId}/polls:
+    get:
+      tags: [Polls]
+      summary: Lista enquetes
+      parameters:
+        - $ref: '#/components/parameters/PathCondoId'
+        - $ref: '#/components/parameters/UpdatedSince'
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [SCHEDULED, OPEN, CLOSED, CANCELLED]
+      responses:
+        '200':
+          description: Lista
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PollPage' }
+    post:
+      tags: [Polls]
+      summary: Cria enquete
+      description: "Permissão: **ADMIN** (`POLL_MANAGE`)."
+      parameters:
+        - $ref: '#/components/parameters/PathCondoId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePollRequest' }
+      responses:
+        '201':
+          description: Enquete criada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Poll' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /polls/{id}/cancel:
+    post:
+      tags: [Polls]
+      summary: Cancela enquete
+      description: "Permissão: **ADMIN**."
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Cancelada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Poll' }
+
+  /polls/{id}/vote:
+    post:
+      tags: [Polls]
+      summary: Registra voto
+      description: |
+        Permissão: **RESIDENT** (`POLL_VOTE`). Backend rejeita com `409
+        ALREADY_VOTED` se o usuário já votou. Voto é único por usuário.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [optionId]
+              properties:
+                optionId: { type: string, format: uuid }
+      responses:
+        '204': { description: Voto registrado }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Usuário já votou ou enquete não está aberta
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /polls/{id}/has-voted:
+    get:
+      tags: [Polls]
+      summary: Indica se o usuário autenticado já votou
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Resultado booleano
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [hasVoted]
+                properties:
+                  hasVoted: { type: boolean }
+
+  /polls/{id}/results:
+    get:
+      tags: [Polls]
+      summary: Resultados da enquete
+      description: |
+        Para enquetes `OPEN`, o backend pode optar por só liberar resultados
+        após `endsAt` — nesse caso retorna `403 RESULTS_NOT_PUBLIC_YET`.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Resultados agregados
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PollResults' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ---------------------------------------------------------------------------
+  # CHAT
+  # ---------------------------------------------------------------------------
+  /condominiums/{condoId}/chat-threads:
+    get:
+      tags: [Chat]
+      summary: Lista threads do usuário autenticado
+      description: |
+        O filtro por participação é automático: apenas threads onde
+        `participantUserIds` contém o usuário da sessão são retornadas.
+      parameters:
+        - $ref: '#/components/parameters/PathCondoId'
+        - $ref: '#/components/parameters/UpdatedSince'
+      responses:
+        '200':
+          description: Lista de threads
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChatThreadPage' }
+    post:
+      tags: [Chat]
+      summary: Cria thread (ou retorna existente com mesmos participantes)
+      description: |
+        Permissão: `CHAT_PARTICIPATE` (qualquer role). Se já existir uma thread
+        com o mesmo conjunto de `participantUserIds` o backend deve retorná-la
+        em vez de duplicar (idempotência por composição de participantes).
+      parameters:
+        - $ref: '#/components/parameters/PathCondoId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, participantUserIds]
+              properties:
+                title: { type: string }
+                participantUserIds:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Thread existente retornada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChatThread' }
+        '201':
+          description: Thread criada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChatThread' }
+
+  /chat-threads/{id}/messages:
+    get:
+      tags: [Chat]
+      summary: Lista mensagens da thread (paginado / incremental)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - in: query
+          name: since
+          schema: { type: string, format: date-time }
+          description: Filtra mensagens com `sentAt >= since`
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Página
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChatMessagePage' }
+    post:
+      tags: [Chat]
+      summary: Envia mensagem
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: { type: string, minLength: 1 }
+      responses:
+        '201':
+          description: Mensagem enviada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChatMessage' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ---------------------------------------------------------------------------
+  # UPLOADS
+  # ---------------------------------------------------------------------------
+  /uploads/images:
+    post:
+      tags: [Uploads]
+      summary: Envia imagem
+      description: |
+        Use este endpoint quando o cliente quer subir uma imagem
+        independentemente (ex.: pré-upload antes de criar um anúncio).
+        Retorna `url` servida pelo backend (não é presigned S3).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: "image/jpeg | image/png | image/webp, máx 5 MB"
+      responses:
+        '201':
+          description: Imagem criada
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, url]
+                properties:
+                  id:  { type: string, format: uuid }
+                  url: { type: string, format: uri }
+        '413': { $ref: '#/components/responses/Validation' }
+        '422': { $ref: '#/components/responses/Validation' }
+
+  /uploads/files:
+    post:
+      tags: [Uploads]
+      summary: Envia arquivo (PDF)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: "application/pdf, máx 20 MB"
+      responses:
+        '201':
+          description: Arquivo criado
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, url, fileName, sizeBytes]
+                properties:
+                  id:        { type: string, format: uuid }
+                  url:       { type: string, format: uri }
+                  fileName:  { type: string }
+                  sizeBytes: { type: integer, format: int64 }
+        '413': { $ref: '#/components/responses/Validation' }
+        '422': { $ref: '#/components/responses/Validation' }
+
+# =============================================================================
+# COMPONENTS
+# =============================================================================
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT `accessToken` no header `Authorization: Bearer <token>`. Em 401
+        com `code: TOKEN_EXPIRED` o cliente deve chamar `/auth/refresh`.
+
+  parameters:
+    PathId:
+      in: path
+      name: id
+      required: true
+      schema: { type: string, format: uuid }
+    PathUnitId:
+      in: path
+      name: unitId
+      required: true
+      schema: { type: string, format: uuid }
+    PathCondoId:
+      in: path
+      name: condoId
+      required: true
+      schema: { type: string, format: uuid }
+    Cursor:
+      in: query
+      name: cursor
+      schema: { type: string }
+      description: Cursor opaco retornado como `nextCursor` na página anterior.
+    Limit:
+      in: query
+      name: limit
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    UpdatedSince:
+      in: query
+      name: updatedSince
+      schema: { type: string, format: date-time }
+      description: |
+        Quando presente, retorna **apenas** itens com `updatedAt >=
+        updatedSince` **mais** tombstones (`deleted: true`) de itens removidos
+        após esse instante. Base do protocolo de sync incremental.
+
+  responses:
+    Unauthorized:
+      description: Token ausente/expirado/inválido
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples:
+            expired:
+              value:
+                error:
+                  code: TOKEN_EXPIRED
+                  message: Sessão expirada
+            invalid:
+              value:
+                error:
+                  code: INVALID_CREDENTIALS
+                  message: Email ou senha inválidos
+    Forbidden:
+      description: Sem permissão para a ação
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error:
+              code: FORBIDDEN
+              message: Você não tem permissão para esta ação
+    NotFound:
+      description: Recurso não encontrado
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error:
+              code: NOT_FOUND
+              message: Recurso não encontrado
+    Validation:
+      description: Dados inválidos
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error:
+              code: VALIDATION_FAILED
+              message: Dados inválidos
+              details:
+                fields:
+                  email: "formato inválido"
+
+  schemas:
+    # ------- base types ------------------------------------------------------
+    Timestamp:
+      type: string
+      format: date-time
+      description: ISO-8601 com offset (ex. 2026-04-17T12:34:56Z)
+    LocalDate:
+      type: string
+      format: date
+      description: YYYY-MM-DD
+    LocalDateTime:
+      type: string
+      pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$'
+      description: LocalDateTime sem timezone (YYYY-MM-DDTHH:MM:SS)
+
+    # ------- error ------------------------------------------------------------
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Código canônico estável (ver README)
+            message:
+              type: string
+              description: Mensagem em pt-BR segura para exibir ao usuário
+            details:
+              type: object
+              additionalProperties: true
+
+    # ------- sync-friendly base -----------------------------------------------
+    SyncFields:
+      type: object
+      required: [id, createdAt, updatedAt, version]
+      properties:
+        id:        { type: string, format: uuid }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        updatedAt: { $ref: '#/components/schemas/Timestamp' }
+        version:
+          type: integer
+          description: Incrementado pelo servidor a cada mutação
+        deleted:
+          type: boolean
+          default: false
+          description: Tombstone — só aparece em respostas com `updatedSince`
+
+    # ------- auth -------------------------------------------------------------
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:    { type: string, format: email }
+        password: { type: string, minLength: 8 }
+
+    RegisterCondominiumRequest:
+      type: object
+      required: [condominiumName, address, adminName, adminEmail, adminPassword]
+      properties:
+        condominiumName: { type: string }
+        address:         { type: string }
+        adminName:       { type: string }
+        adminEmail:      { type: string, format: email }
+        adminPassword:   { type: string, minLength: 8 }
+
+    JoinCondominiumRequest:
+      type: object
+      required: [condoCode, unitIdentifier, name, email, password]
+      properties:
+        condoCode:      { type: string }
+        unitIdentifier: { type: string }
+        name:           { type: string }
+        email:          { type: string, format: email }
+        password:       { type: string, minLength: 8 }
+        phone:          { type: string, nullable: true }
+
+    CreateMemberRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name:     { type: string }
+        email:    { type: string, format: email }
+        password: { type: string, minLength: 8 }
+        phone:    { type: string, nullable: true }
+
+    AuthTokensResponse:
+      type: object
+      required: [accessToken, refreshToken, user]
+      properties:
+        accessToken:  { type: string }
+        refreshToken: { type: string }
+        user:         { $ref: '#/components/schemas/User' }
+
+    # ------- domain -----------------------------------------------------------
+    UserRole:
+      type: string
+      enum: [ADMIN, SUPERVISOR, RESIDENT]
+
+    User:
+      allOf:
+        - $ref: '#/components/schemas/SyncFields'
+        - type: object
+          required: [name, email, role, condominiumId]
+          properties:
+            name:           { type: string }
+            email:          { type: string, format: email }
+            phone:          { type: string, nullable: true }
+            role:           { $ref: '#/components/schemas/UserRole' }
+            condominiumId:  { type: string, format: uuid }
+            unitId:         { type: string, format: uuid, nullable: true }
+            avatarUrl:      { type: string, format: uri, nullable: true }
+
+    Condominium:
+      allOf:
+        - $ref: '#/components/schemas/SyncFields'
+        - type: object
+          required: [name, address, code]
+          properties:
+            name:    { type: string }
+            address: { type: string }
+            code:    { type: string, description: Código público de ingresso }
+
+    CondoUnit:
+      allOf:
+        - $ref: '#/components/schemas/SyncFields'
+        - type: object
+          required: [condominiumId, identifier]
+          properties:
+            condominiumId: { type: string, format: uuid }
+            identifier:    { type: string }
+            block:         { type: string, nullable: true }
+            ownerUserId:   { type: string, format: uuid, nullable: true }
+
+    Notice:
+      allOf:
+        - $ref: '#/components/schemas/SyncFields'
+        - type: object
+          required: [condominiumId, title, description, authorId, authorName]
+          properties:
+            condominiumId: { type: string, format: uuid }
+            title:         { type: string }
+            description:   { type: string }
+            authorId:      { type: string, format: uuid }
+            authorName:    { type: string }
+
+    PackageStatus:
+      type: string
+      enum: [RECEIVED, PICKED_UP]
+
+    PackageItem:
+      allOf:
+        - $ref: '#/components/schemas/SyncFields'
+        - type: object
+          required: [condominiumId, unitId, unitIdentifier, description, status, receivedAt, registeredByUserId]
+          properties:
+            condominiumId:      { type: string, format: uuid }
+            unitId:             { type: string, format: uuid }
+            unitIdentifier:     { type: string }
+            description:        { type: string }
+            carrier:            { type: string, nullable: true }
+            status:             { $ref: '#/components/schemas/PackageStatus' }
+            receivedAt:         { $ref: '#/components/schemas/Timestamp' }
+            pickedUpAt:         { $ref: '#/components/schemas/Timestamp', nullable: true }
+            registeredByUserId: { type: string, format: uuid }
+
+    PackageDescription:
+      allOf:
+        - $ref: '#/components/schemas/SyncFields'
+        - type: object
+          required: [condominiumId, text]
+          properties:
+            condominiumId: { type: string, format: uuid }
+            text:          { type: string }
+
+    CommonSpace:
+      allOf:
+        - $ref: '#/components/schemas/SyncFields'
+        - type: object
+          required: [condominiumId, name, description, price, active]
+          properties:
+            condominiumId: { type: string, format: uuid }
+            name:          { type: string }
+            description:   { type: string }
+            price:         { type: number, format: double }
+            imageUrls:
+              type: array
+              items: { type: string, format: uri }
+            active:        { type: boolean, default: true }
+
+    CreateSpaceRequest:
+      type: object
+      required: [name, description, price]
+      properties:
+        name:        { type: string }
+        description: { type: string }
+        price:       { type: number, format: double }
+        imageUrls:
+          type: array
+          items: { type: string, format: uri }
+
+    ReservationStatus:
+      type: string
+      enum: [CONFIRMED, CANCELLED_BY_RESIDENT, CANCELLED_BY_STAFF]
+
+    Reservation:
+      allOf:
+        - $ref: '#/components/schemas/SyncFields'
+        - type: object
+          required: [spaceId, spaceName, unitId, unitIdentifier, residentUserId, residentName, date, status]
+          properties:
+            spaceId:             { type: string, format: uuid }
+            spaceName:           { type: string }
+            unitId:              { type: string, format: uuid }
+            unitIdentifier:      { type: string }
+            residentUserId:      { type: string, format: uuid }
+            residentName:        { type: string }
+            date:                { $ref: '#/components/schemas/LocalDate' }
+            status:              { $ref: '#/components/schemas/ReservationStatus' }
+            cancelledAt:         { $ref: '#/components/schemas/Timestamp', nullable: true }
+            cancellationReason:  { type: string, nullable: true }
+
+    ListingStatus:
+      type: string
+      enum: [ACTIVE, CLOSED, EXPIRED]
+
+    Listing:
+      allOf:
+        - $ref: '#/components/schemas/SyncFields'
+        - type: object
+          required: [condominiumId, authorUserId, authorName, unitIdentifier, title, description, status, expiresAt]
+          properties:
+            condominiumId:   { type: string, format: uuid }
+            authorUserId:    { type: string, format: uuid }
+            authorName:      { type: string }
+            unitIdentifier:  { type: string }
+            title:           { type: string }
+            description:     { type: string }
+            price:           { type: number, format: double, nullable: true }
+            imageUrls:
+              type: array
+              items: { type: string, format: uri }
+            status:          { $ref: '#/components/schemas/ListingStatus' }
+            expiresAt:       { $ref: '#/components/schemas/Timestamp' }
+
+    CreateListingRequest:
+      type: object
+      required: [title, description]
+      properties:
+        title:       { type: string }
+        description: { type: string }
+        price:       { type: number, format: double, nullable: true }
+        imageUrls:
+          type: array
+          items: { type: string, format: uri }
+
+    MovingStatus:
+      type: string
+      enum: [PENDING, APPROVED, REJECTED, CANCELLED]
+
+    MovingRequest:
+      allOf:
+        - $ref: '#/components/schemas/SyncFields'
+        - type: object
+          required: [condominiumId, unitId, unitIdentifier, residentUserId, residentName, scheduledFor, status]
+          properties:
+            condominiumId:     { type: string, format: uuid }
+            unitId:            { type: string, format: uuid }
+            unitIdentifier:    { type: string }
+            residentUserId:    { type: string, format: uuid }
+            residentName:      { type: string }
+            scheduledFor:      { $ref: '#/components/schemas/LocalDateTime' }
+            status:            { $ref: '#/components/schemas/MovingStatus' }
+            decisionReason:    { type: string, nullable: true }
+            decidedByUserId:   { type: string, format: uuid, nullable: true }
+            decidedAt:         { $ref: '#/components/schemas/Timestamp', nullable: true }
+
+    FileDoc:
+      allOf:
+        - $ref: '#/components/schemas/SyncFields'
+        - type: object
+          required: [condominiumId, title, fileUrl, sizeBytes, uploadedByUserId, uploadedAt]
+          properties:
+            condominiumId:    { type: string, format: uuid }
+            title:            { type: string }
+            description:      { type: string, nullable: true }
+            fileUrl:          { type: string, format: uri }
+            sizeBytes:        { type: integer, format: int64 }
+            uploadedByUserId: { type: string, format: uuid }
+            uploadedAt:       { $ref: '#/components/schemas/Timestamp' }
+
+    PollStatus:
+      type: string
+      enum: [SCHEDULED, OPEN, CLOSED, CANCELLED]
+
+    PollOption:
+      type: object
+      required: [id, text]
+      properties:
+        id:   { type: string, format: uuid }
+        text: { type: string }
+
+    Poll:
+      allOf:
+        - $ref: '#/components/schemas/SyncFields'
+        - type: object
+          required: [condominiumId, question, options, startsAt, endsAt, status, createdByUserId]
+          properties:
+            condominiumId:   { type: string, format: uuid }
+            question:        { type: string }
+            options:
+              type: array
+              items: { $ref: '#/components/schemas/PollOption' }
+            startsAt:        { $ref: '#/components/schemas/Timestamp' }
+            endsAt:          { $ref: '#/components/schemas/Timestamp' }
+            status:          { $ref: '#/components/schemas/PollStatus' }
+            createdByUserId: { type: string, format: uuid }
+
+    CreatePollRequest:
+      type: object
+      required: [question, options, startsAt, endsAt]
+      properties:
+        question: { type: string }
+        options:
+          type: array
+          minItems: 2
+          items: { type: string }
+        startsAt: { $ref: '#/components/schemas/Timestamp' }
+        endsAt:   { $ref: '#/components/schemas/Timestamp' }
+
+    PollResults:
+      type: object
+      required: [pollId, total, countsByOptionId]
+      properties:
+        pollId: { type: string, format: uuid }
+        total:  { type: integer }
+        countsByOptionId:
+          type: object
+          additionalProperties:
+            type: integer
+
+    ChatThread:
+      allOf:
+        - $ref: '#/components/schemas/SyncFields'
+        - type: object
+          required: [condominiumId, title, participantUserIds]
+          properties:
+            condominiumId: { type: string, format: uuid }
+            title:         { type: string }
+            participantUserIds:
+              type: array
+              items: { type: string, format: uuid }
+            lastMessagePreview: { type: string, nullable: true }
+            lastMessageAt:      { $ref: '#/components/schemas/Timestamp', nullable: true }
+
+    ChatMessage:
+      allOf:
+        - $ref: '#/components/schemas/SyncFields'
+        - type: object
+          required: [threadId, senderUserId, senderName, text, sentAt]
+          properties:
+            threadId:     { type: string, format: uuid }
+            senderUserId: { type: string, format: uuid }
+            senderName:   { type: string }
+            text:         { type: string }
+            sentAt:       { $ref: '#/components/schemas/Timestamp' }
+
+    # ------- page wrappers ---------------------------------------------------
+    Page:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items: {}
+        nextCursor:
+          type: string
+          nullable: true
+          description: Cursor para próxima página, ou `null` se chegou ao fim.
+    UnitPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/CondoUnit' }
+    NoticePage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/Notice' }
+    PackagePage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/PackageItem' }
+    CommonSpacePage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/CommonSpace' }
+    ReservationPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/Reservation' }
+    ListingPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/Listing' }
+    MovingPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/MovingRequest' }
+    FileDocPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/FileDoc' }
+    PollPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/Poll' }
+    ChatThreadPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/ChatThread' }
+    ChatMessagePage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/ChatMessage' }

@@ -2,6 +2,8 @@ package br.tec.wrcoder.meucondominio.core.storage
 
 import platform.Foundation.NSUserDefaults
 
+// TODO(iOS security): substituir por Keychain (SecItemAdd/Copy) antes de release.
+// NSUserDefaults é file-backed e suficiente para dev/scaffold, mas não é criptografado.
 class IosSecureStorage(
     private val defaults: NSUserDefaults = NSUserDefaults.standardUserDefaults,
 ) : SecureStorage {

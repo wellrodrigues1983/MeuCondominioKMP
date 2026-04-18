@@ -1,0 +1,52 @@
+CREATE TABLE IF NOT EXISTS package_entity (
+    id TEXT NOT NULL PRIMARY KEY,
+    condominiumId TEXT NOT NULL,
+    unitId TEXT NOT NULL,
+    unitIdentifier TEXT NOT NULL,
+    description TEXT NOT NULL,
+    carrier TEXT,
+    status TEXT NOT NULL,
+    receivedAt INTEGER NOT NULL,
+    pickedUpAt INTEGER,
+    registeredByUserId TEXT NOT NULL,
+    updatedAt INTEGER NOT NULL,
+    version INTEGER NOT NULL DEFAULT 0,
+    deleted INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS package_entity_condominiumId_idx ON package_entity(condominiumId);
+CREATE INDEX IF NOT EXISTS package_entity_unitId_idx ON package_entity(unitId);
+
+CREATE TABLE IF NOT EXISTS package_description_entity (
+    id TEXT NOT NULL PRIMARY KEY,
+    condominiumId TEXT NOT NULL,
+    text TEXT NOT NULL,
+    updatedAt INTEGER NOT NULL,
+    version INTEGER NOT NULL DEFAULT 0,
+    deleted INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS package_description_entity_condominiumId_idx ON package_description_entity(condominiumId);
+
+upsertPackage:
+INSERT OR REPLACE INTO package_entity(id, condominiumId, unitId, unitIdentifier, description, carrier, status, receivedAt, pickedUpAt, registeredByUserId, updatedAt, version, deleted)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+observeByCondominium:
+SELECT * FROM package_entity WHERE condominiumId = ? AND deleted = 0 ORDER BY receivedAt DESC;
+
+observeByUnit:
+SELECT * FROM package_entity WHERE unitId = ? AND deleted = 0 ORDER BY receivedAt DESC;
+
+getPackage:
+SELECT * FROM package_entity WHERE id = ?;
+
+lastPackageUpdatedAt:
+SELECT MAX(updatedAt) FROM package_entity WHERE condominiumId = ?;
+
+upsertDescription:
+INSERT OR REPLACE INTO package_description_entity(id, condominiumId, text, updatedAt, version, deleted)
+VALUES (?, ?, ?, ?, ?, ?);
+
+observeDescriptions:
+SELECT * FROM package_description_entity WHERE condominiumId = ? AND deleted = 0 ORDER BY text;

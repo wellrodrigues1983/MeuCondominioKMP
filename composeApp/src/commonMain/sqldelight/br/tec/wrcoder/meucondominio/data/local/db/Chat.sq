@@ -1,0 +1,50 @@
+CREATE TABLE IF NOT EXISTS chat_thread_entity (
+    id TEXT NOT NULL PRIMARY KEY,
+    condominiumId TEXT NOT NULL,
+    title TEXT NOT NULL,
+    participantsJson TEXT NOT NULL,
+    lastMessagePreview TEXT,
+    lastMessageAt INTEGER,
+    updatedAt INTEGER NOT NULL,
+    version INTEGER NOT NULL DEFAULT 0,
+    deleted INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS chat_thread_entity_condominiumId_idx ON chat_thread_entity(condominiumId);
+
+CREATE TABLE IF NOT EXISTS chat_message_entity (
+    id TEXT NOT NULL PRIMARY KEY,
+    threadId TEXT NOT NULL,
+    senderUserId TEXT NOT NULL,
+    senderName TEXT NOT NULL,
+    text TEXT NOT NULL,
+    sentAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL,
+    version INTEGER NOT NULL DEFAULT 0,
+    deleted INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS chat_message_entity_threadId_idx ON chat_message_entity(threadId);
+
+upsertThread:
+INSERT OR REPLACE INTO chat_thread_entity(id, condominiumId, title, participantsJson, lastMessagePreview, lastMessageAt, updatedAt, version, deleted)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+observeThreads:
+SELECT * FROM chat_thread_entity WHERE condominiumId = ? AND deleted = 0 ORDER BY lastMessageAt DESC;
+
+getThread:
+SELECT * FROM chat_thread_entity WHERE id = ?;
+
+lastThreadUpdatedAt:
+SELECT MAX(updatedAt) FROM chat_thread_entity WHERE condominiumId = ?;
+
+upsertMessage:
+INSERT OR REPLACE INTO chat_message_entity(id, threadId, senderUserId, senderName, text, sentAt, updatedAt, version, deleted)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+observeMessages:
+SELECT * FROM chat_message_entity WHERE threadId = ? AND deleted = 0 ORDER BY sentAt ASC;
+
+lastMessageUpdatedAt:
+SELECT MAX(updatedAt) FROM chat_message_entity WHERE threadId = ?;

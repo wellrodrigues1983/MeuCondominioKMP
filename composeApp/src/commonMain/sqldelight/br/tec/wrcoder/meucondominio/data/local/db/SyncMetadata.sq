@@ -1,0 +1,10 @@
+CREATE TABLE IF NOT EXISTS sync_cursor (
+    key TEXT NOT NULL PRIMARY KEY,
+    updatedSince INTEGER NOT NULL
+);
+
+upsertCursor:
+INSERT OR REPLACE INTO sync_cursor(key, updatedSince) VALUES (?, ?);
+
+getCursor:
+SELECT updatedSince FROM sync_cursor WHERE key = ?;

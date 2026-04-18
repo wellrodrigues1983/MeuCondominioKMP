@@ -1,0 +1,64 @@
+CREATE TABLE IF NOT EXISTS space_entity (
+    id TEXT NOT NULL PRIMARY KEY,
+    condominiumId TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL,
+    price REAL NOT NULL,
+    imageUrlsJson TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1,
+    updatedAt INTEGER NOT NULL,
+    version INTEGER NOT NULL DEFAULT 0,
+    deleted INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS space_entity_condominiumId_idx ON space_entity(condominiumId);
+
+CREATE TABLE IF NOT EXISTS reservation_entity (
+    id TEXT NOT NULL PRIMARY KEY,
+    spaceId TEXT NOT NULL,
+    spaceName TEXT NOT NULL,
+    unitId TEXT NOT NULL,
+    unitIdentifier TEXT NOT NULL,
+    residentUserId TEXT NOT NULL,
+    residentName TEXT NOT NULL,
+    dateEpochDay INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    createdAt INTEGER NOT NULL,
+    cancelledAt INTEGER,
+    cancellationReason TEXT,
+    updatedAt INTEGER NOT NULL,
+    version INTEGER NOT NULL DEFAULT 0,
+    deleted INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS reservation_entity_spaceId_idx ON reservation_entity(spaceId);
+CREATE INDEX IF NOT EXISTS reservation_entity_unitId_idx ON reservation_entity(unitId);
+
+upsertSpace:
+INSERT OR REPLACE INTO space_entity(id, condominiumId, name, description, price, imageUrlsJson, active, updatedAt, version, deleted)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+observeSpaces:
+SELECT * FROM space_entity WHERE condominiumId = ? AND deleted = 0 ORDER BY name;
+
+getSpace:
+SELECT * FROM space_entity WHERE id = ?;
+
+softDeleteSpace:
+UPDATE space_entity SET deleted = 1, updatedAt = ? WHERE id = ?;
+
+lastUpdatedAtSpaces:
+SELECT MAX(updatedAt) FROM space_entity WHERE condominiumId = ?;
+
+upsertReservation:
+INSERT OR REPLACE INTO reservation_entity(id, spaceId, spaceName, unitId, unitIdentifier, residentUserId, residentName, dateEpochDay, status, createdAt, cancelledAt, cancellationReason, updatedAt, version, deleted)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+observeReservationsBySpace:
+SELECT * FROM reservation_entity WHERE spaceId = ? AND deleted = 0 ORDER BY dateEpochDay DESC;
+
+observeReservationsByUnit:
+SELECT * FROM reservation_entity WHERE unitId = ? AND deleted = 0 ORDER BY dateEpochDay DESC;
+
+getReservation:
+SELECT * FROM reservation_entity WHERE id = ?;

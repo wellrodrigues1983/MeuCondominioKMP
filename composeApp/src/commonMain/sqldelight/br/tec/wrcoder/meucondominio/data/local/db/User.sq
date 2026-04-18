@@ -1,0 +1,36 @@
+CREATE TABLE IF NOT EXISTS user_entity (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    phone TEXT,
+    role TEXT NOT NULL,
+    condominiumId TEXT NOT NULL,
+    unitId TEXT,
+    avatarUrl TEXT,
+    createdAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL,
+    version INTEGER NOT NULL DEFAULT 0,
+    deleted INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS user_entity_unitId_idx ON user_entity(unitId);
+CREATE INDEX IF NOT EXISTS user_entity_condominiumId_idx ON user_entity(condominiumId);
+
+upsertUser:
+INSERT OR REPLACE INTO user_entity(id, name, email, phone, role, condominiumId, unitId, avatarUrl, createdAt, updatedAt, version, deleted)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+getUser:
+SELECT * FROM user_entity WHERE id = ? AND deleted = 0;
+
+listUsersByCondominium:
+SELECT * FROM user_entity WHERE condominiumId = ? AND deleted = 0 ORDER BY name;
+
+listMembersByUnit:
+SELECT * FROM user_entity WHERE unitId = ? AND deleted = 0 ORDER BY name;
+
+listSupervisors:
+SELECT * FROM user_entity WHERE condominiumId = ? AND role = 'SUPERVISOR' AND deleted = 0 ORDER BY name;
+
+deleteUser:
+UPDATE user_entity SET deleted = 1, updatedAt = ? WHERE id = ?;
