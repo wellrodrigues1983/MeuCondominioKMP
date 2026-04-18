@@ -8,6 +8,7 @@ import kotlinx.datetime.LocalDate
 
 interface SpaceRepository {
     fun observeSpaces(condominiumId: String): Flow<List<CommonSpace>>
+    suspend fun refreshSpaces(condominiumId: String)
     suspend fun createSpace(
         condominiumId: String,
         name: String,

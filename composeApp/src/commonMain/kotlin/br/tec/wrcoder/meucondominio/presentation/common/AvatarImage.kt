@@ -8,6 +8,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -19,6 +20,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import br.tec.wrcoder.meucondominio.core.BinaryStore
+import br.tec.wrcoder.meucondominio.domain.repository.MediaRepository
 import coil3.compose.AsyncImage
 import org.koin.compose.koinInject
 
@@ -32,9 +34,16 @@ fun AvatarImage(
     size: Dp = 40.dp,
     textStyle: TextStyle = MaterialTheme.typography.titleMedium,
     store: BinaryStore = koinInject(),
+    media: MediaRepository = koinInject(),
 ) {
     val entries by store.entries.collectAsStateWithLifecycle()
     val bytes = avatarUrl?.let { entries[it] }
+
+    LaunchedEffect(avatarUrl) {
+        if (avatarUrl != null && entries[avatarUrl] == null && !avatarUrl.startsWith("memory://")) {
+            media.fetchImageBytes(avatarUrl)
+        }
+    }
     Surface(
         shape = CircleShape,
         color = background,

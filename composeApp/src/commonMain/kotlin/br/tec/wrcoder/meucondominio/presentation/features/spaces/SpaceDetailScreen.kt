@@ -187,6 +187,28 @@ fun SpaceDetailScreen(
         }
     }
 
+    uiState.error?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { spacesViewModel.clearError() },
+            confirmButton = {
+                TextButton(onClick = { spacesViewModel.clearError() }) { Text("OK") }
+            },
+            title = { Text("Aviso") },
+            text = { Text(msg) },
+        )
+    }
+
+    uiState.notice?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { spacesViewModel.clearNotice() },
+            confirmButton = {
+                TextButton(onClick = { spacesViewModel.clearNotice() }) { Text("OK") }
+            },
+            title = { Text("Reserva confirmada") },
+            text = { Text(msg) },
+        )
+    }
+
     tappedReservation?.let { r ->
         AlertDialog(
             onDismissRequest = { tappedReservation = null },

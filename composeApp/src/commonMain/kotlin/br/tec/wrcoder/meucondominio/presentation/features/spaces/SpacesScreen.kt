@@ -30,7 +30,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -55,6 +59,8 @@ import org.koin.compose.viewmodel.koinViewModel
 @Composable
 fun SpacesScreen(vm: SpacesViewModel = koinViewModel(), navigator: AppNavigator = koinInject()) {
     val s by vm.state.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { vm.refresh() }
+    var pendingCancel by remember { mutableStateOf<Reservation?>(null) }
     Scaffold(
         topBar = { AppTopBar("Espaços comuns", onBack = { navigator.back() }) },
         floatingActionButton = {
@@ -90,7 +96,7 @@ fun SpacesScreen(vm: SpacesViewModel = koinViewModel(), navigator: AppNavigator 
                             }
                         }
                         items(s.myReservations, key = { it.id }) { reservation ->
-                            ReservationCard(reservation, onCancel = { vm.cancelReservation(reservation) })
+                            ReservationCard(reservation, onCancel = { pendingCancel = reservation })
                         }
                     }
                 }
@@ -141,6 +147,25 @@ fun SpacesScreen(vm: SpacesViewModel = koinViewModel(), navigator: AppNavigator 
             confirmButton = { TextButton(onClick = vm::clearError) { Text("OK") } },
             title = { Text("Aviso") },
             text = { Text(it) },
+        )
+    }
+
+    pendingCancel?.let { reservation ->
+        AlertDialog(
+            onDismissRequest = { pendingCancel = null },
+            title = { Text("Cancelar reserva?") },
+            text = {
+                Text("Deseja cancelar a reserva de ${reservation.spaceName} em ${reservation.date.formatBr()}?")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.cancelReservation(reservation)
+                    pendingCancel = null
+                }) { Text("Cancelar reserva") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingCancel = null }) { Text("Voltar") }
+            },
         )
     }
 }

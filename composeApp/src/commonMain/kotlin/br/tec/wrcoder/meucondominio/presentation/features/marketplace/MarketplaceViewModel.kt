@@ -3,7 +3,6 @@ package br.tec.wrcoder.meucondominio.presentation.features.marketplace
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import br.tec.wrcoder.meucondominio.core.AppResult
-import br.tec.wrcoder.meucondominio.core.BinaryStore
 import br.tec.wrcoder.meucondominio.domain.model.Action
 import br.tec.wrcoder.meucondominio.domain.model.Listing
 import br.tec.wrcoder.meucondominio.domain.model.Permissions
@@ -11,6 +10,7 @@ import br.tec.wrcoder.meucondominio.domain.model.User
 import br.tec.wrcoder.meucondominio.domain.repository.AuthRepository
 import br.tec.wrcoder.meucondominio.domain.repository.CondominiumRepository
 import br.tec.wrcoder.meucondominio.domain.repository.ListingRepository
+import br.tec.wrcoder.meucondominio.domain.repository.MediaRepository
 import br.tec.wrcoder.meucondominio.domain.usecase.RenewListingUseCase
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -45,7 +45,7 @@ class MarketplaceViewModel(
     private val auth: AuthRepository,
     private val condos: CondominiumRepository,
     private val renewListingUseCase: RenewListingUseCase,
-    private val binaryStore: BinaryStore,
+    private val media: MediaRepository,
 ) : ViewModel() {
 
     private val user = auth.session.map { it?.user }
@@ -94,8 +94,13 @@ class MarketplaceViewModel(
         val bytes = e.imageBytes ?: run {
             _error.value = "Selecione uma foto do produto"; return
         }
-        val images = listOf(binaryStore.putImage(bytes))
         viewModelScope.launch {
+            val images = when (val up = media.uploadImage(bytes)) {
+                is AppResult.Success -> listOf(up.data)
+                is AppResult.Failure -> {
+                    _error.value = up.error.message; return@launch
+                }
+            }
             val unit = (condos.listUnits(u.condominiumId) as? AppResult.Success)?.data
                 ?.firstOrNull { it.id == unitId }
             val identifier = unit?.identifier ?: ""

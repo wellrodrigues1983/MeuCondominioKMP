@@ -22,6 +22,8 @@ class FakeSpaceRepository(
     override fun observeSpaces(condominiumId: String): Flow<List<CommonSpace>> =
         store.spaces.map { all -> all.filter { it.condominiumId == condominiumId && it.active } }
 
+    override suspend fun refreshSpaces(condominiumId: String) { }
+
     override suspend fun createSpace(
         condominiumId: String,
         name: String,

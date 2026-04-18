@@ -3,13 +3,14 @@ package br.tec.wrcoder.meucondominio.presentation.features.spaces
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import br.tec.wrcoder.meucondominio.core.AppResult
-import br.tec.wrcoder.meucondominio.core.BinaryStore
+import br.tec.wrcoder.meucondominio.core.formatBr
 import br.tec.wrcoder.meucondominio.domain.model.Action
 import br.tec.wrcoder.meucondominio.domain.model.CommonSpace
 import br.tec.wrcoder.meucondominio.domain.model.Permissions
 import br.tec.wrcoder.meucondominio.domain.model.Reservation
 import br.tec.wrcoder.meucondominio.domain.model.User
 import br.tec.wrcoder.meucondominio.domain.repository.AuthRepository
+import br.tec.wrcoder.meucondominio.domain.repository.MediaRepository
 import br.tec.wrcoder.meucondominio.domain.repository.SpaceRepository
 import br.tec.wrcoder.meucondominio.domain.usecase.CancelReservationUseCase
 import br.tec.wrcoder.meucondominio.presentation.navigation.AppNavigator
@@ -40,6 +41,7 @@ data class SpacesUiState(
     val canManage: Boolean = false,
     val editor: SpaceEditor = SpaceEditor(),
     val error: String? = null,
+    val notice: String? = null,
     val user: User? = null,
 )
 
@@ -49,7 +51,7 @@ class SpacesViewModel(
     private val auth: AuthRepository,
     private val cancelReservationUseCase: CancelReservationUseCase,
     private val navigator: AppNavigator,
-    private val binaryStore: BinaryStore,
+    private val media: MediaRepository,
 ) : ViewModel() {
 
     private val user = auth.session.map { it?.user }
@@ -57,6 +59,7 @@ class SpacesViewModel(
 
     private val _editor = MutableStateFlow(SpaceEditor())
     private val _error = MutableStateFlow<String?>(null)
+    private val _notice = MutableStateFlow<String?>(null)
 
     val state = combine(
         user.flatMapLatest { u ->
@@ -67,17 +70,23 @@ class SpacesViewModel(
         },
         user,
         _editor,
-        _error,
-    ) { spaces, reservations, u, editor, error ->
+        combine(_error, _notice) { e, n -> e to n },
+    ) { spaces, reservations, u, editor, (error, notice) ->
         SpacesUiState(
             spaces = spaces,
             myReservations = reservations,
             canManage = u != null && Permissions.canPerform(u.role, Action.SPACE_MANAGE),
             editor = editor,
             error = error,
+            notice = notice,
             user = u,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, SpacesUiState())
+
+    fun refresh() {
+        val u = user.value ?: return
+        viewModelScope.launch { spaceRepository.refreshSpaces(u.condominiumId) }
+    }
 
     fun openDetail(space: CommonSpace) = navigator.go(Route.SpaceDetail(space.id))
 
@@ -93,8 +102,15 @@ class SpacesViewModel(
             _error.value = "Valor inválido"
             return
         }
-        val images = e.imageBytes?.let { listOf(binaryStore.putImage(it)) } ?: emptyList()
         viewModelScope.launch {
+            val images: List<String> = e.imageBytes?.let { bytes ->
+                when (val up = media.uploadImage(bytes)) {
+                    is AppResult.Success -> listOf(up.data)
+                    is AppResult.Failure -> {
+                        _error.value = up.error.message; return@launch
+                    }
+                }
+            } ?: emptyList()
             when (val r = spaceRepository.createSpace(u.condominiumId, e.name, e.description, price, images)) {
                 is AppResult.Success -> _editor.value = SpaceEditor()
                 is AppResult.Failure -> _error.value = r.error.message
@@ -103,14 +119,23 @@ class SpacesViewModel(
     }
 
     fun reserve(space: CommonSpace, date: LocalDate) {
-        val u = user.value ?: return
+        val u = user.value
+        println("[Spaces] reserve tap space=${space.id} date=$date user=${u?.id} unitId=${u?.unitId}")
+        if (u == null) {
+            _error.value = "Sessão inválida. Entre novamente."
+            return
+        }
         if (u.unitId == null) {
             _error.value = "Apenas moradores vinculados a uma unidade podem reservar"
             return
         }
         viewModelScope.launch {
             val r = spaceRepository.reserve(space.id, u.unitId, u.id, date)
-            if (r is AppResult.Failure) _error.value = r.error.message
+            println("[Spaces] reserve result=$r")
+            when (r) {
+                is AppResult.Success -> _notice.value = "Reserva de ${space.name} confirmada para ${date.formatBr()}."
+                is AppResult.Failure -> _error.value = r.error.message
+            }
         }
     }
 
@@ -123,4 +148,5 @@ class SpacesViewModel(
     }
 
     fun clearError() { _error.value = null }
+    fun clearNotice() { _notice.value = null }
 }

@@ -31,6 +31,7 @@ import br.tec.wrcoder.meucondominio.data.repository.FakeAuthRepository
 import br.tec.wrcoder.meucondominio.data.repository.FakeChatRepository
 import br.tec.wrcoder.meucondominio.data.repository.FakeCondominiumRepository
 import br.tec.wrcoder.meucondominio.data.repository.FakeFilesRepository
+import br.tec.wrcoder.meucondominio.data.repository.FakeMediaRepository
 import br.tec.wrcoder.meucondominio.data.repository.FakeListingRepository
 import br.tec.wrcoder.meucondominio.data.repository.FakeMovingRepository
 import br.tec.wrcoder.meucondominio.data.repository.FakeNoticeRepository
@@ -44,6 +45,7 @@ import br.tec.wrcoder.meucondominio.data.repository.remote.RemoteAuthRepository
 import br.tec.wrcoder.meucondominio.data.repository.remote.RemoteChatRepository
 import br.tec.wrcoder.meucondominio.data.repository.remote.RemoteCondominiumRepository
 import br.tec.wrcoder.meucondominio.data.repository.remote.RemoteFilesRepository
+import br.tec.wrcoder.meucondominio.data.repository.remote.RemoteMediaRepository
 import br.tec.wrcoder.meucondominio.data.repository.remote.RemoteListingsRepository
 import br.tec.wrcoder.meucondominio.data.repository.remote.RemoteMovingsRepository
 import br.tec.wrcoder.meucondominio.data.repository.remote.RemoteNoticesRepository
@@ -56,6 +58,7 @@ import br.tec.wrcoder.meucondominio.domain.repository.AuthRepository
 import br.tec.wrcoder.meucondominio.domain.repository.ChatRepository
 import br.tec.wrcoder.meucondominio.domain.repository.CondominiumRepository
 import br.tec.wrcoder.meucondominio.domain.repository.FilesRepository
+import br.tec.wrcoder.meucondominio.domain.repository.MediaRepository
 import br.tec.wrcoder.meucondominio.domain.repository.ListingRepository
 import br.tec.wrcoder.meucondominio.domain.repository.MovingRepository
 import br.tec.wrcoder.meucondominio.domain.repository.NoticeRepository
@@ -128,17 +131,19 @@ fun commonModule(): Module = module {
         singleOf(::FakeFilesRepository) bind FilesRepository::class
         singleOf(::FakePollsRepository) bind PollsRepository::class
         singleOf(::FakeChatRepository) bind ChatRepository::class
+        singleOf(::FakeMediaRepository) bind MediaRepository::class
     } else {
         single<AuthRepository> { RemoteAuthRepository(get(), get(), get(), get()) }
         single<CondominiumRepository> { RemoteCondominiumRepository(get(), get(), get()) }
         single<NoticeRepository> { RemoteNoticesRepository(get(), get(), get(), get(), get(), get()) }
-        single<SpaceRepository> { RemoteSpacesRepository(get(), get(), get(), get(), get(), get()) }
+        single<SpaceRepository> { RemoteSpacesRepository(get(), get(), get(), get(), get(), get(), get()) }
         single<ListingRepository> { RemoteListingsRepository(get(), get(), get(), get(), get(), get()) }
         single<MovingRepository> { RemoteMovingsRepository(get(), get(), get(), get(), get(), get()) }
         single<FilesRepository> { RemoteFilesRepository(get(), get(), get(), get()) }
         single<PollsRepository> { RemotePollsRepository(get(), get(), get(), get(), get(), get()) }
         single<PackageRepository> { RemotePackagesRepository(get(), get(), get(), get(), get(), get()) }
         single<ChatRepository> { RemoteChatRepository(get(), get(), get(), get(), get(), get()) }
+        single<MediaRepository> { RemoteMediaRepository(get(), get(), get(), get()) }
     }
     singleOf(::LoggingNotificationsRepository) bind NotificationsRepository::class
 

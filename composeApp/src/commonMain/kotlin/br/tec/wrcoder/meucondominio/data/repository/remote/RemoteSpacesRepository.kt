@@ -25,6 +25,7 @@ import br.tec.wrcoder.meucondominio.data.sync.SyncCursors
 import br.tec.wrcoder.meucondominio.domain.model.CommonSpace
 import br.tec.wrcoder.meucondominio.domain.model.Reservation
 import br.tec.wrcoder.meucondominio.domain.model.ReservationStatus
+import br.tec.wrcoder.meucondominio.domain.repository.MediaRepository
 import br.tec.wrcoder.meucondominio.domain.repository.SpaceRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -66,6 +67,7 @@ class RemoteSpacesRepository(
     private val network: NetworkMonitor,
     private val clock: AppClock,
     private val json: Json,
+    private val media: MediaRepository,
 ) : SpaceRepository {
 
     private val bgScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -94,7 +96,9 @@ class RemoteSpacesRepository(
         }
         dispatcher.register(Entities.RESERVATION, Ops.CREATE) { payload, _ ->
             val p = json.decodeFromString(ReservePayload.serializer(), payload)
+            println("[Spaces] dispatcher RESERVATION.CREATE space=${p.spaceId} unit=${p.unitId} date=${p.date}")
             val dto = api.reserve(p.spaceId, CreateReservationRequestDto(p.unitId, p.date))
+            println("[Spaces] dispatcher RESERVATION.CREATE -> server id=${dto.id} status=${dto.status}")
             if (dto.id != p.id) db.spaceQueries.deleteReservationById(p.id)
             persistReservation(dto)
         }
@@ -112,6 +116,10 @@ class RemoteSpacesRepository(
         db.spaceQueries.observeSpaces(condominiumId).asFlow().mapToList(Dispatchers.Default)
             .map { rows -> rows.map { it.toDomain() } }
             .onStart { bgScope.launch { pullSpaces(condominiumId) } }
+
+    override suspend fun refreshSpaces(condominiumId: String) {
+        pullSpaces(condominiumId)
+    }
 
     override suspend fun createSpace(
         condominiumId: String, name: String, description: String,
@@ -161,29 +169,39 @@ class RemoteSpacesRepository(
     override suspend fun reserve(
         spaceId: String, unitId: String, residentUserId: String, date: LocalDate,
     ): AppResult<Reservation> {
+        println("[Spaces] reserve repo enter space=$spaceId unit=$unitId user=$residentUserId date=$date")
         val id = newId()
         val now = clock.now()
         val space = db.spaceQueries.getSpace(spaceId).executeAsOneOrNull()
-            ?: return AppResult.Failure(AppError.NotFound("Espaço não encontrado"))
-        val unit = db.condominiumQueries.getUnit(unitId).executeAsOneOrNull()
-            ?: return AppResult.Failure(AppError.NotFound("Unidade não encontrada"))
-        val user = db.userQueries.getUser(residentUserId).executeAsOneOrNull()
-            ?: return AppResult.Failure(AppError.NotFound("Usuário não encontrado"))
+            ?: run {
+                println("[Spaces] reserve repo: space $spaceId not found locally")
+                return AppResult.Failure(AppError.NotFound("Espaço não encontrado"))
+            }
+        val unitIdentifier = db.condominiumQueries.getUnit(unitId).executeAsOneOrNull()?.identifier.orEmpty()
+        val residentName = db.userQueries.getUser(residentUserId).executeAsOneOrNull()?.name.orEmpty()
         db.spaceQueries.upsertReservation(
             id = id, spaceId = spaceId, spaceName = space.name, unitId = unitId,
-            unitIdentifier = unit.identifier, residentUserId = residentUserId,
-            residentName = user.name, dateEpochDay = date.toEpochDays().toLong(),
+            unitIdentifier = unitIdentifier, residentUserId = residentUserId,
+            residentName = residentName, dateEpochDay = date.toEpochDays().toLong(),
             status = "CONFIRMED", createdAt = now.toEpoch(), cancelledAt = null,
             cancellationReason = null, updatedAt = now.toEpoch(), version = 0, deleted = 0,
         )
+        val optimistic = Reservation(id, spaceId, space.name, unitId, unitIdentifier,
+            residentUserId, residentName, date, ReservationStatus.CONFIRMED, now)
         dispatcher.enqueue(Entities.RESERVATION, Ops.CREATE, id,
             json.encodeToString(ReservePayload.serializer(),
                 ReservePayload(id, spaceId, unitId, date.toString())))
-        if (network.isOnline.value) runCatching { dispatcher.drain() }
-        return AppResult.Success(
-            Reservation(id, spaceId, space.name, unitId, unit.identifier,
-                residentUserId, user.name, date, ReservationStatus.CONFIRMED, now)
-        )
+        println("[Spaces] reserve repo enqueued id=$id")
+        if (network.isOnline.value) {
+            val drain = runCatching { dispatcher.drain() }
+            println("[Spaces] reserve repo drain result=$drain")
+            if (drain.isFailure) {
+                return AppResult.Failure(AppError.Network(
+                    drain.exceptionOrNull()?.message ?: "Falha ao reservar"
+                ))
+            }
+        }
+        return AppResult.Success(optimistic)
     }
 
     override suspend fun cancelByResident(
@@ -214,23 +232,32 @@ class RemoteSpacesRepository(
     }
 
     private suspend fun pullSpaces(condominiumId: String) {
+        println("[Spaces] pullSpaces(condo=$condominiumId) online=${network.isOnline.value}")
         if (!network.isOnline.value) return
-        val firstTime = condominiumId !in reconciledSpaces
-        val since = if (firstTime) null
-        else db.syncMetadataQueries.getCursor(SyncCursors.spacesOf(condominiumId))
-            .executeAsOneOrNull()?.let { Instant.fromEpochMilliseconds(it).toString() }
-        runCatching { api.listSpaces(condominiumId, since) }.onSuccess { items ->
-            if (firstTime) {
+        runCatching { api.listSpaces(condominiumId, null) }
+            .onFailure { println("[Spaces] listSpaces failed: ${it.message}") }
+            .onSuccess { items ->
+                println("[Spaces] listSpaces returned ${items.size} items")
                 val serverIds = items.map { it.id }.toSet()
                 val localIds = db.spaceQueries.idsSpacesByCondominium(condominiumId).executeAsList().toSet()
                 (localIds - serverIds).forEach { db.spaceQueries.deleteSpaceById(it) }
                 reconciledSpaces += condominiumId
+                items.forEach(::persistSpace)
+                items.maxOfOrNull { Instant.parse(it.updatedAt).toEpoch() }?.let {
+                    db.syncMetadataQueries.upsertCursor(SyncCursors.spacesOf(condominiumId), it)
+                }
+                items.asSequence()
+                    .flatMap { it.imageUrls.asSequence() }
+                    .filter { it.isNotBlank() && !it.startsWith("memory://") }
+                    .distinct()
+                    .forEach { url ->
+                        println("[Spaces] prefetch image url=$url")
+                        bgScope.launch {
+                            val r = media.fetchImageBytes(url)
+                            println("[Spaces] prefetch result url=$url -> $r")
+                        }
+                    }
             }
-            items.forEach(::persistSpace)
-            items.maxOfOrNull { Instant.parse(it.updatedAt).toEpoch() }?.let {
-                db.syncMetadataQueries.upsertCursor(SyncCursors.spacesOf(condominiumId), it)
-            }
-        }
     }
 
     private suspend fun pullReservationsBySpace(spaceId: String) {
@@ -276,9 +303,14 @@ class RemoteSpacesRepository(
     }
 
     private fun persistSpace(dto: CommonSpaceDto) {
+        val sanitized = dto.imageUrls.filter { it.isNotBlank() && !it.startsWith("memory://") }
+        if (sanitized.size != dto.imageUrls.size) {
+            println("[Spaces] persistSpace dropped ${dto.imageUrls.size - sanitized.size} invalid URL(s) id=${dto.id}")
+        }
+        println("[Spaces] persistSpace id=${dto.id} name=${dto.name} imageUrls=$sanitized")
         db.spaceQueries.upsertSpace(
             id = dto.id, condominiumId = dto.condominiumId, name = dto.name, description = dto.description,
-            price = dto.price, imageUrlsJson = encodeStrings(dto.imageUrls),
+            price = dto.price, imageUrlsJson = encodeStrings(sanitized),
             active = if (dto.active) 1L else 0L, updatedAt = Instant.parse(dto.updatedAt).toEpoch(),
             version = dto.version, deleted = if (dto.deleted) 1L else 0L,
         )
