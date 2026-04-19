@@ -28,5 +28,8 @@ DELETE FROM outbox_entry WHERE id = ?;
 pendingCount:
 SELECT COUNT(*) FROM outbox_entry;
 
+countPendingForEntity:
+SELECT COUNT(*) FROM outbox_entry WHERE entity = ? AND entityId = ?;
+
 clear:
 DELETE FROM outbox_entry;

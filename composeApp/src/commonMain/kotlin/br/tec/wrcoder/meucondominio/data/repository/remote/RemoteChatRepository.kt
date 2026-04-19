@@ -22,6 +22,8 @@ import br.tec.wrcoder.meucondominio.domain.model.ChatMessage
 import br.tec.wrcoder.meucondominio.domain.model.ChatThread
 import br.tec.wrcoder.meucondominio.domain.model.ChatThreadKind
 import br.tec.wrcoder.meucondominio.domain.repository.ChatRepository
+import io.ktor.client.plugins.ClientRequestException
+import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -240,7 +242,24 @@ class RemoteChatRepository(
             reconciledMessages += threadId
             items.forEach(::persistMessage)
         }
-        result.onFailure { println("[ChatRepo] pullMessages(thread=$threadId) failed: ${it.message}") }
+        result.onFailure { err ->
+            if (err is ClientRequestException && err.response.status == HttpStatusCode.NotFound) {
+                purgeGhostThread(threadId)
+            } else {
+                println("[ChatRepo] pullMessages(thread=$threadId) failed: ${err.message}")
+            }
+        }
+    }
+
+    private fun purgeGhostThread(threadId: String) {
+        val pending = db.outboxQueries
+            .countPendingForEntity(Entities.CHAT_THREAD, threadId).executeAsOne()
+        if (pending > 0) return
+        db.chatQueries.deleteMessagesByThread(threadId)
+        db.chatQueries.deleteThreadById(threadId)
+        reconciledMessages.remove(threadId)
+        if (_activeThreadId.value == threadId) _activeThreadId.value = null
+        println("[ChatRepo] purged ghost thread=$threadId (server returned 404)")
     }
 
     private fun persistThread(dto: ChatThreadDto) {

@@ -12,7 +12,6 @@ import br.tec.wrcoder.meucondominio.domain.repository.UserDirectory
 import br.tec.wrcoder.meucondominio.presentation.navigation.AppNavigator
 import br.tec.wrcoder.meucondominio.presentation.navigation.Route
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
@@ -20,7 +19,6 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 data class ChatThreadsUiState(
@@ -66,15 +64,6 @@ class ChatThreadsViewModel(
         viewModelScope.launch {
             users.refresh(u.condominiumId)
             chat.ensureCondoGroup(u.condominiumId)
-        }
-    }
-
-    init {
-        viewModelScope.launch {
-            while (isActive) {
-                delay(8_000)
-                me.value?.let { runCatching { chat.refreshThreads(it.condominiumId) } }
-            }
         }
     }
 

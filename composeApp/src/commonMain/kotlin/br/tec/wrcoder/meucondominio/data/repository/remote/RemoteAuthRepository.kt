@@ -24,9 +24,14 @@ import br.tec.wrcoder.meucondominio.domain.repository.AuthRepository
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.auth.authProviders
 import io.ktor.client.plugins.auth.providers.BearerAuthProvider
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
 import kotlinx.datetime.Instant
 
 class RemoteAuthRepository(
@@ -34,10 +39,22 @@ class RemoteAuthRepository(
     private val tokens: TokenStore,
     private val db: MeuCondominioDb,
     private val httpClient: HttpClient,
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) : AuthRepository {
 
     private val _session = MutableStateFlow(restoreSession())
     override val session: Flow<AuthSession?> = _session.asStateFlow()
+
+    init {
+        scope.launch {
+            tokens.tokens.drop(1).collect { current ->
+                if (current == null && _session.value != null) {
+                    clearLocalCache()
+                    _session.value = null
+                }
+            }
+        }
+    }
 
     override suspend fun login(credentials: LoginCredentials): AppResult<AuthSession> =
         runRemote { api.login(LoginRequestDto(credentials.email, credentials.password)) }

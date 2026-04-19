@@ -2,11 +2,22 @@ package br.tec.wrcoder.meucondominio.data.remote.ws
 
 import br.tec.wrcoder.meucondominio.core.BuildConfig
 import br.tec.wrcoder.meucondominio.core.network.NetworkMonitor
+import br.tec.wrcoder.meucondominio.core.storage.AuthTokens
 import br.tec.wrcoder.meucondominio.core.storage.TokenStore
 import br.tec.wrcoder.meucondominio.data.remote.dto.ChatMessageDto
 import br.tec.wrcoder.meucondominio.data.remote.dto.ChatThreadDto
 import io.ktor.client.HttpClient
+import io.ktor.client.call.body
+import io.ktor.client.plugins.auth.authProvider
+import io.ktor.client.plugins.auth.providers.BearerAuthProvider
 import io.ktor.client.plugins.websocket.webSocketSession
+import io.ktor.client.request.header
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.contentType
+import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
 import io.ktor.websocket.close
 import io.ktor.websocket.readText
@@ -21,10 +32,19 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+
+@Serializable
+private data class WsRefreshRequest(val refreshToken: String)
+
+@Serializable
+private data class WsRefreshResponse(val accessToken: String, val refreshToken: String)
 
 sealed class ChatRealtimeEvent {
     data class MessageNew(val message: ChatMessageDto) : ChatRealtimeEvent()
@@ -45,6 +65,7 @@ class ChatRealtimeClient(
     val events: SharedFlow<ChatRealtimeEvent> = _events.asSharedFlow()
 
     private var loopJob: Job? = null
+    private val refreshMutex = Mutex()
 
     fun start() {
         if (loopJob?.isActive == true) return
@@ -64,34 +85,63 @@ class ChatRealtimeClient(
                 delay(backoff(++attempt))
                 continue
             }
-            val connected = runCatching { connectOnce(token) }
-            if (connected.isSuccess) {
+            val outcome = runCatching { connectOnce(token) }
+            val needsRefresh = outcome.fold(
+                onSuccess = { reason -> reason?.code?.toInt() == AUTH_CLOSE_CODE },
+                onFailure = { t ->
+                    val msg = t.message.orEmpty()
+                    println("[ChatWS] disconnected: $msg")
+                    msg.contains("401") || msg.contains("Unauthorized", ignoreCase = true)
+                },
+            )
+            if (needsRefresh) {
+                println("[ChatWS] auth-related close; refreshing token before reconnect")
+                val refreshed = refreshMutex.withLock { refreshAccessToken() }
+                if (refreshed != null) {
+                    attempt = 0
+                    continue
+                }
+            } else if (outcome.isSuccess) {
                 attempt = 0
-            } else {
-                println("[ChatWS] disconnected: ${connected.exceptionOrNull()?.message}")
             }
             delay(backoff(++attempt))
         }
     }
 
-    private suspend fun connectOnce(token: String) {
+    private suspend fun connectOnce(token: String): CloseReason? {
         val url = buildWsUrl(token)
         println("[ChatWS] connecting $url")
         val session = http.webSocketSession(url)
-        val heartbeat = scope.launch {
-            while (isActive) {
-                delay(30_000)
-                runCatching { session.send(Frame.Text("""{"type":"ping"}""")) }
-            }
-        }
         try {
             for (frame in session.incoming) {
                 if (frame !is Frame.Text) continue
                 handleText(frame.readText())
             }
         } finally {
-            heartbeat.cancel()
             runCatching { session.close() }
+        }
+        val reason = runCatching { session.closeReason.await() }.getOrNull()
+        if (reason != null) println("[ChatWS] closed code=${reason.code} message=${reason.message}")
+        return reason
+    }
+
+    private suspend fun refreshAccessToken(): String? {
+        val current = tokens.read() ?: return null
+        if (current.refreshToken.isBlank()) return null
+        return try {
+            val response: WsRefreshResponse = http
+                .post("${BuildConfig.API_BASE_URL.trimEnd('/')}/auth/refresh") {
+                    header(HttpHeaders.Authorization, "")
+                    contentType(ContentType.Application.Json)
+                    setBody(WsRefreshRequest(current.refreshToken))
+                }.body()
+            val fresh = AuthTokens(response.accessToken, response.refreshToken)
+            tokens.updateTokens(fresh)
+            http.authProvider<BearerAuthProvider>()?.clearToken()
+            fresh.accessToken
+        } catch (t: Throwable) {
+            println("[ChatWS] refresh failed: ${t.message}")
+            null
         }
     }
 
@@ -122,5 +172,9 @@ class ChatRealtimeClient(
     private fun backoff(attempt: Int): Long {
         val capped = attempt.coerceIn(1, 6)
         return (1_000L * (1L shl (capped - 1))).coerceAtMost(30_000L)
+    }
+
+    companion object {
+        private const val AUTH_CLOSE_CODE = 4001
     }
 }

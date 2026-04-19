@@ -8,7 +8,6 @@ import br.tec.wrcoder.meucondominio.domain.repository.AuthRepository
 import br.tec.wrcoder.meucondominio.domain.repository.ChatRepository
 import br.tec.wrcoder.meucondominio.domain.repository.UserDirectory
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,7 +17,6 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 data class ChatThreadUiState(
@@ -57,12 +55,6 @@ class ChatThreadViewModel(
                         )
                     }
                 }
-        }
-        viewModelScope.launch {
-            while (isActive && currentThreadId == threadId) {
-                delay(3_000)
-                runCatching { chat.refreshMessages(threadId) }
-            }
         }
     }
 
