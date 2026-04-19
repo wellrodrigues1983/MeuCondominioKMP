@@ -313,6 +313,42 @@ paths:
   # ---------------------------------------------------------------------------
   # UNIT MEMBERS / USERS
   # ---------------------------------------------------------------------------
+  /condominiums/{id}/members:
+    get:
+      tags: [Users]
+      summary: Lista membros (usuários) do condomínio
+      description: |
+        Usado pelo app para popular a lista de contatos em "Iniciar conversa"
+        do chat. Permissão: qualquer papel (`CHAT_PARTICIPATE`). O servidor
+        **deve** rejeitar `{id}` diferente de `session.condominiumId` com
+        `403 CROSS_TENANT`.
+
+        Compatível com sync incremental (`updatedSince`) e paginação por
+        cursor. Tombstones (`deleted: true`) são incluídos quando
+        `updatedSince` está presente. Ordenação obrigatória:
+        `COALESCE(deleted_at, updated_at) ASC, id ASC`.
+
+        Contrato completo: [`CONDOMINIUM_MEMBERS.md`](./CONDOMINIUM_MEMBERS.md).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - in: query
+          name: role
+          schema: { $ref: '#/components/schemas/UserRole' }
+          description: Filtra pelo papel indicado.
+        - $ref: '#/components/parameters/UpdatedSince'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Página de usuários
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+
   /units/{unitId}/members:
     get:
       tags: [Users]
@@ -1188,6 +1224,20 @@ paths:
         Permissão: `CHAT_PARTICIPATE` (qualquer role). Se já existir uma thread
         com o mesmo conjunto de `participantUserIds` o backend deve retorná-la
         em vez de duplicar (idempotência por composição de participantes).
+
+        Idempotência adicional via `clientRefId`: o cliente envia o UUID que
+        já criou localmente (offline-first). O servidor **deve**:
+
+        1. Se existir thread com `id == clientRefId`, retorná-la.
+        2. Senão, se existir thread com os mesmos `participantUserIds`,
+           retorná-la (id do servidor).
+        3. Senão, criar uma nova thread **usando `clientRefId` como `id`**,
+           desde que ainda não esteja em uso.
+
+        Isso elimina duplicatas quando o POST é reenviado (retry offline) e
+        também quando o servidor decide adotar o id do cliente. Se o servidor
+        retornar um `id` diferente do `clientRefId`, o cliente remove a
+        placeholder local; por isso a regra (3) acima é fortemente recomendada.
       parameters:
         - $ref: '#/components/parameters/PathCondoId'
       requestBody:
@@ -1202,6 +1252,14 @@ paths:
                 participantUserIds:
                   type: array
                   items: { type: string, format: uuid }
+                clientRefId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  description: |
+                    UUID gerado pelo cliente para idempotência. Quando
+                    presente e livre, o servidor deve adotá-lo como `id` da
+                    thread. Ver descrição da operação.
       responses:
         '200':
           description: Thread existente retornada
@@ -1213,6 +1271,40 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ChatThread' }
+
+  /condominiums/{id}/chat-threads/group:
+    get:
+      tags: [Chat]
+      summary: Retorna (ou cria) o grupo de chat do condomínio
+      description: |
+        Endpoint idempotente. Retorna a thread **singleton** de tipo
+        `CONDO_GROUP` do condomínio, criando-a na primeira chamada. Toda
+        criação/edição de membros do condomínio deve atualizar
+        `participantUserIds` **automaticamente** nesta thread (o cliente
+        nunca gerencia membros do grupo do condomínio).
+
+        Regras:
+        - Somente um thread `CONDO_GROUP` por condomínio (unicidade em
+          `(condominiumId, kind = 'CONDO_GROUP')`).
+        - `participantUserIds` = todos os usuários ativos (não deletados)
+          do condomínio, independente de papel.
+        - `title` default: `"Grupo do condomínio"`. Pode ser editável por
+          `ADMIN` (endpoint futuro — MVP apenas o default).
+        - Mudanças em membership devem emitir `thread.update` via WebSocket
+          (ver `CHAT_WEBSOCKET.md`).
+
+        Contrato completo: [`CONDO_GROUP_CHAT.md`](./CONDO_GROUP_CHAT.md).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Thread do grupo (existente ou recém-criada)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChatThread' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /chat-threads/{id}/messages:
     get:
@@ -1235,6 +1327,20 @@ paths:
     post:
       tags: [Chat]
       summary: Envia mensagem
+      description: |
+        Idempotência via `clientRefId`: o cliente envia o UUID que já
+        criou localmente (offline-first). O servidor **deve**:
+
+        1. Se existir mensagem com `id == clientRefId`, retorná-la (200).
+        2. Senão, criar a mensagem **usando `clientRefId` como `id`**,
+           desde que ainda não esteja em uso (201).
+
+        Isso evita duplicatas quando o POST é reenviado (retry offline)
+        e quando o cliente precisa correlacionar a resposta com o
+        placeholder local. Se o servidor retornar um `id` diferente do
+        `clientRefId`, o cliente deleta a placeholder local — o que
+        ainda causa flicker na UI; por isso a regra (2) é fortemente
+        recomendada.
       parameters:
         - $ref: '#/components/parameters/PathId'
       requestBody:
@@ -1246,9 +1352,22 @@ paths:
               required: [text]
               properties:
                 text: { type: string, minLength: 1 }
+                clientRefId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  description: |
+                    UUID gerado pelo cliente para idempotência. Quando
+                    presente e livre, o servidor deve adotá-lo como
+                    `id` da mensagem.
       responses:
+        '200':
+          description: Mensagem já existente retornada (mesmo `clientRefId`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChatMessage' }
         '201':
-          description: Mensagem enviada
+          description: Mensagem criada
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ChatMessage' }
@@ -1761,11 +1880,21 @@ components:
           additionalProperties:
             type: integer
 
+    ChatThreadKind:
+      type: string
+      enum: [DIRECT, CONDO_GROUP]
+      description: |
+        - `DIRECT`: conversa entre usuários específicos (1:1 ou N:N criado
+          explicitamente).
+        - `CONDO_GROUP`: thread singleton do condomínio. Membership é
+          gerenciado pelo servidor (todos os usuários ativos). Ver
+          `CONDO_GROUP_CHAT.md`.
+
     ChatThread:
       allOf:
         - $ref: '#/components/schemas/SyncFields'
         - type: object
-          required: [condominiumId, title, participantUserIds]
+          required: [condominiumId, title, participantUserIds, kind]
           properties:
             condominiumId: { type: string, format: uuid }
             title:         { type: string }
@@ -1774,6 +1903,9 @@ components:
               items: { type: string, format: uuid }
             lastMessagePreview: { type: string, nullable: true }
             lastMessageAt:      { $ref: '#/components/schemas/Timestamp', nullable: true }
+            kind:
+              allOf: [ { $ref: '#/components/schemas/ChatThreadKind' } ]
+              default: DIRECT
 
     ChatMessage:
       allOf:
@@ -1807,6 +1939,14 @@ components:
             items:
               type: array
               items: { $ref: '#/components/schemas/CondoUnit' }
+    UserPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/User' }
     NoticePage:
       allOf:
         - $ref: '#/components/schemas/Page'

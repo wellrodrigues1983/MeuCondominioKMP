@@ -54,6 +54,7 @@ kotlin {
         iosTarget.binaries.framework {
             baseName = "ComposeApp"
             isStatic = true
+            linkerOpts.add("-lsqlite3")
         }
     }
 
@@ -90,6 +91,7 @@ kotlin {
             implementation(libs.ktor.client.contentNegotiation)
             implementation(libs.ktor.client.auth)
             implementation(libs.ktor.client.logging)
+            implementation(libs.ktor.client.websockets)
             implementation(libs.ktor.serialization.json)
 
             implementation(libs.sqldelight.runtime)
@@ -156,6 +158,16 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask<*>>().con
 }
 tasks.matching { it.name.endsWith("SourcesJar") }.configureEach {
     dependsOn(generateBuildConfig)
+}
+
+// Workaround: o plugin Compose Multiplatform às vezes não encadeia
+// corretamente generateActualResourceCollectorsFor<Target>Main ->
+// compileKotlin<Target>, especialmente com config cache reutilizado.
+// Forçar a dependência elimina o "No such file or directory" em
+// ActualResourceCollectors.kt.
+tasks.matching { it.name.startsWith("compileKotlinIos") }.configureEach {
+    val target = name.removePrefix("compileKotlin")
+    dependsOn("generateActualResourceCollectorsFor${target}Main")
 }
 
 dependencies {

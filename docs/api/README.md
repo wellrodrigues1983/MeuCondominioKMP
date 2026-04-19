@@ -46,6 +46,12 @@ padrões transversais e fluxos que o YAML sozinho não comunica.
   o antigo e emite novo par. Se receber um refresh já invalidado, resposta
   `401 REFRESH_REVOKED` — forçar logout no cliente.
 - `POST /auth/logout` revoga o refresh atual.
+- **Toda resposta `401` autenticada deve incluir o header**
+  `WWW-Authenticate: Bearer realm="api"` (e opcionalmente `error="invalid_token"`
+  quando o JWT está expirado). Sem esse header, clientes que usam o plugin
+  `Auth` do Ktor (e outras libs HTTP padrão) não disparam o refresh
+  automático — o cliente do app tem uma defesa manual, mas outros consumidores
+  da API dependem do header.
 
 ### 2.2 Fluxo de login
 
@@ -352,6 +358,19 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
   "https://api.meucondominio.app/v1/polls/$PID/vote"
 ```
 
+### 8.10.1 Listar membros do condomínio (para iniciar chat)
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://api.meucondominio.app/v1/condominiums/$CID/members?role=SUPERVISOR"
+```
+
+Resposta: envelope padrão de paginação com `items: [User]`. O filtro `role`
+é opcional (`ADMIN`, `SUPERVISOR`, `RESIDENT`). Usado pelo app para popular a
+lista de contatos disponíveis para abrir uma conversa. Contrato completo,
+consulta SQL de referência e check-list de implementação:
+[`CONDOMINIUM_MEMBERS.md`](./CONDOMINIUM_MEMBERS.md).
+
 ### 8.11 Enviar mensagem de chat
 
 ```bash
@@ -360,6 +379,23 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
   -d '{"text":"Alguém viu a chave na garagem?"}' \
   "https://api.meucondominio.app/v1/chat-threads/$TID/messages"
 ```
+
+### 8.11.1 Obter a thread do grupo do condomínio
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://api.meucondominio.app/v1/condominiums/$CID/members"
+```
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://api.meucondominio.app/v1/condominiums/$CID/chat-threads/group"
+```
+
+Idempotente. Retorna a thread singleton `kind = "CONDO_GROUP"` (criando na
+primeira chamada). O servidor mantém `participantUserIds` em sincronia com
+todos os moradores ativos do condomínio — o cliente **não** gerencia essa
+membership. Contrato completo: [`CONDO_GROUP_CHAT.md`](./CONDO_GROUP_CHAT.md).
 
 ### 8.12 Upload de PDF
 
@@ -405,22 +441,24 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 
 ---
 
-## 10. Chat em tempo real (futuro)
+## 10. Chat em tempo real (WebSocket)
 
-O app hoje pode fazer polling de `/chat-threads/{id}/messages?since=...`. A
-evolução recomendada é WebSocket:
+O cliente usa REST para histórico/envio e WebSocket para **push** de novas
+mensagens e atualizações de thread. A especificação completa do canal está em
+[`CHAT_WEBSOCKET.md`](./CHAT_WEBSOCKET.md). Resumo:
 
-- Endpoint: `wss://api.meucondominio.app/ws/chat?token=<accessToken>`
-- Autenticação: JWT no query string (aceito **somente** no handshake; após
-  promovido, o gateway derruba a conexão em caso de `exp`).
-- Eventos server→client (JSON):
-  - `message.new` — `{ type, threadId, message: ChatMessage }`
-  - `thread.update` — `{ type, thread: ChatThread }`
-- Eventos client→server:
-  - `subscribe` — `{ type, threadIds: [uuid] }`
-  - `ping` — heartbeat a cada 30s (client envia, server responde `pong`).
-- O endpoint REST continua sendo a fonte de verdade (WS é só push). O cliente
-  deve **sempre** reconciliar via `updatedSince` após reconectar.
+- Endpoint: `wss://<host>/v1/ws/chat?token=<accessToken>` (dev: `ws://localhost:8080/v1/ws/chat`).
+- Handshake autenticado via `token` no query string (JWT de acesso). Depois do
+  upgrade o gateway deve derrubar a conexão quando `exp` expirar.
+- O servidor inscreve automaticamente o usuário nas threads em que participa
+  (filtradas por `condominiumId` do token). `subscribe` é opcional para
+  refinar o filtro.
+- Eventos server→client: `message.new`, `thread.update` (payloads idênticos aos
+  DTOs REST — ver `openapi.yaml`).
+- Eventos client→server: `ping` (heartbeat 30 s, resposta `pong`) e
+  `subscribe` opcional.
+- REST permanece a **fonte de verdade**: o cliente, ao (re)conectar, faz pull
+  incremental via `updatedSince` antes de consumir eventos.
 
 ---
 

@@ -14,4 +14,9 @@ interface ChatRepository {
         title: String,
         participantUserIds: List<String>,
     ): AppResult<ChatThread>
+
+    suspend fun ensureCondoGroup(condominiumId: String): AppResult<ChatThread>
+
+    suspend fun refreshThreads(condominiumId: String)
+    suspend fun refreshMessages(threadId: String)
 }

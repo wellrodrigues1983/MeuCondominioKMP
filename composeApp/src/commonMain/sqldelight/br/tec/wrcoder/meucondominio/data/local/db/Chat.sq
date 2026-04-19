@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS chat_thread_entity (
     lastMessageAt INTEGER,
     updatedAt INTEGER NOT NULL,
     version INTEGER NOT NULL DEFAULT 0,
-    deleted INTEGER NOT NULL DEFAULT 0
+    deleted INTEGER NOT NULL DEFAULT 0,
+    kind TEXT NOT NULL DEFAULT 'DIRECT'
 );
 
 CREATE INDEX IF NOT EXISTS chat_thread_entity_condominiumId_idx ON chat_thread_entity(condominiumId);
@@ -27,11 +28,14 @@ CREATE TABLE IF NOT EXISTS chat_message_entity (
 CREATE INDEX IF NOT EXISTS chat_message_entity_threadId_idx ON chat_message_entity(threadId);
 
 upsertThread:
-INSERT OR REPLACE INTO chat_thread_entity(id, condominiumId, title, participantsJson, lastMessagePreview, lastMessageAt, updatedAt, version, deleted)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT OR REPLACE INTO chat_thread_entity(id, condominiumId, title, participantsJson, lastMessagePreview, lastMessageAt, updatedAt, version, deleted, kind)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 observeThreads:
 SELECT * FROM chat_thread_entity WHERE condominiumId = ? AND deleted = 0 ORDER BY lastMessageAt DESC;
+
+observeCondoGroup:
+SELECT * FROM chat_thread_entity WHERE condominiumId = ? AND kind = 'CONDO_GROUP' AND deleted = 0 LIMIT 1;
 
 getThread:
 SELECT * FROM chat_thread_entity WHERE id = ?;
@@ -63,6 +67,9 @@ DELETE FROM chat_message_entity WHERE id = ?;
 
 idsThreadsByCondominium:
 SELECT id FROM chat_thread_entity WHERE condominiumId = ?;
+
+idsDirectThreadsByCondominium:
+SELECT id FROM chat_thread_entity WHERE condominiumId = ? AND kind = 'DIRECT';
 
 idsMessagesByThread:
 SELECT id FROM chat_message_entity WHERE threadId = ?;

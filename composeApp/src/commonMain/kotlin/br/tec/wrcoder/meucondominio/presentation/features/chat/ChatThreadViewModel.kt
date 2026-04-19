@@ -2,18 +2,23 @@ package br.tec.wrcoder.meucondominio.presentation.features.chat
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import br.tec.wrcoder.meucondominio.data.repository.InMemoryStore
 import br.tec.wrcoder.meucondominio.domain.model.ChatMessage
 import br.tec.wrcoder.meucondominio.domain.model.User
 import br.tec.wrcoder.meucondominio.domain.repository.AuthRepository
 import br.tec.wrcoder.meucondominio.domain.repository.ChatRepository
+import br.tec.wrcoder.meucondominio.domain.repository.UserDirectory
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 data class ChatThreadUiState(
@@ -23,10 +28,11 @@ data class ChatThreadUiState(
     val usersById: Map<String, User> = emptyMap(),
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ChatThreadViewModel(
     private val chat: ChatRepository,
     private val auth: AuthRepository,
-    private val store: InMemoryStore,
+    private val users: UserDirectory,
 ) : ViewModel() {
 
     private val me = auth.session.map { it?.user }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
@@ -39,16 +45,25 @@ class ChatThreadViewModel(
         if (currentThreadId == threadId) return
         currentThreadId = threadId
         viewModelScope.launch {
-            combine(chat.observeMessages(threadId), store.users) { msgs, users -> msgs to users }
-                .collect { (msgs, users) ->
+            val peopleFlow = me.flatMapLatest { u ->
+                if (u == null) flowOf(emptyList()) else users.observeUsers(u.condominiumId)
+            }
+            combine(chat.observeMessages(threadId), peopleFlow) { msgs, people -> msgs to people }
+                .collect { (msgs, people) ->
                     _state.update {
                         it.copy(
                             messages = msgs,
                             me = me.value,
-                            usersById = users.associateBy { u -> u.id },
+                            usersById = people.associateBy { u -> u.id },
                         )
                     }
                 }
+        }
+        viewModelScope.launch {
+            while (isActive && currentThreadId == threadId) {
+                delay(1_500)
+                runCatching { chat.refreshMessages(threadId) }
+            }
         }
     }
 

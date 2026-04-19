@@ -365,12 +365,14 @@ data class ChatThreadDto(
     val updatedAt: String,
     val version: Long = 0,
     val deleted: Boolean = false,
+    val kind: String = "DIRECT",
 )
 
 @Serializable
 data class CreateChatThreadRequestDto(
     val title: String,
     val participantUserIds: List<String>,
+    val clientRefId: String? = null,
 )
 
 @Serializable

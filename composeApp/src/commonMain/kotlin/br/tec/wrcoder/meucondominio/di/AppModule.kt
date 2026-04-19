@@ -27,8 +27,10 @@ import br.tec.wrcoder.meucondominio.data.remote.PollsApiService
 import br.tec.wrcoder.meucondominio.data.remote.SpacesApiService
 import br.tec.wrcoder.meucondominio.data.remote.UploadsApiService
 import br.tec.wrcoder.meucondominio.data.remote.createHttpClient
+import br.tec.wrcoder.meucondominio.data.remote.ws.ChatRealtimeClient
 import br.tec.wrcoder.meucondominio.data.repository.FakeAuthRepository
 import br.tec.wrcoder.meucondominio.data.repository.FakeChatRepository
+import br.tec.wrcoder.meucondominio.data.repository.FakeUserDirectory
 import br.tec.wrcoder.meucondominio.data.repository.FakeCondominiumRepository
 import br.tec.wrcoder.meucondominio.data.repository.FakeFilesRepository
 import br.tec.wrcoder.meucondominio.data.repository.FakeMediaRepository
@@ -52,6 +54,7 @@ import br.tec.wrcoder.meucondominio.data.repository.remote.RemoteNoticesReposito
 import br.tec.wrcoder.meucondominio.data.repository.remote.RemotePackagesRepository
 import br.tec.wrcoder.meucondominio.data.repository.remote.RemotePollsRepository
 import br.tec.wrcoder.meucondominio.data.repository.remote.RemoteSpacesRepository
+import br.tec.wrcoder.meucondominio.data.repository.remote.RemoteUserDirectory
 import br.tec.wrcoder.meucondominio.data.sync.OutboxDispatcher
 import br.tec.wrcoder.meucondominio.data.sync.SyncEngine
 import br.tec.wrcoder.meucondominio.domain.repository.AuthRepository
@@ -66,6 +69,7 @@ import br.tec.wrcoder.meucondominio.domain.repository.NotificationsRepository
 import br.tec.wrcoder.meucondominio.domain.repository.PackageRepository
 import br.tec.wrcoder.meucondominio.domain.repository.PollsRepository
 import br.tec.wrcoder.meucondominio.domain.repository.SpaceRepository
+import br.tec.wrcoder.meucondominio.domain.repository.UserDirectory
 import br.tec.wrcoder.meucondominio.domain.usecase.AuthorizeActionUseCase
 import br.tec.wrcoder.meucondominio.domain.usecase.CancelReservationUseCase
 import br.tec.wrcoder.meucondominio.domain.usecase.RenewListingUseCase
@@ -114,6 +118,7 @@ fun commonModule(): Module = module {
     single { PackagesApiService(get()) }
     single { ChatApiService(get()) }
     single { UploadsApiService(get()) }
+    single { ChatRealtimeClient(get(), get(), get(), get()) }
 
     single { MeuCondominioDb(get<DatabaseDriverFactory>().create()) }
     single { OutboxDispatcher(get(), get()) }
@@ -132,6 +137,7 @@ fun commonModule(): Module = module {
         singleOf(::FakePollsRepository) bind PollsRepository::class
         singleOf(::FakeChatRepository) bind ChatRepository::class
         singleOf(::FakeMediaRepository) bind MediaRepository::class
+        singleOf(::FakeUserDirectory) bind UserDirectory::class
     } else {
         single<AuthRepository> { RemoteAuthRepository(get(), get(), get(), get()) }
         single<CondominiumRepository> { RemoteCondominiumRepository(get(), get(), get()) }
@@ -142,8 +148,9 @@ fun commonModule(): Module = module {
         single<FilesRepository> { RemoteFilesRepository(get(), get(), get(), get()) }
         single<PollsRepository> { RemotePollsRepository(get(), get(), get(), get(), get(), get()) }
         single<PackageRepository> { RemotePackagesRepository(get(), get(), get(), get(), get(), get()) }
-        single<ChatRepository> { RemoteChatRepository(get(), get(), get(), get(), get(), get()) }
+        single<ChatRepository> { RemoteChatRepository(get(), get(), get(), get(), get(), get(), get()) }
         single<MediaRepository> { RemoteMediaRepository(get(), get(), get(), get()) }
+        single<UserDirectory> { RemoteUserDirectory(get(), get(), get()) }
     }
     singleOf(::LoggingNotificationsRepository) bind NotificationsRepository::class
 

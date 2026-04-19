@@ -96,6 +96,9 @@ class CondominiumApiService(private val http: HttpClient) {
         http.get("condominiums/$condominiumId/units/by-identifier/$identifier").body()
     suspend fun createUnit(condominiumId: String, body: CreateUnitRequestDto): CondoUnitDto =
         http.post("condominiums/$condominiumId/units") { setBody(body) }.body()
+    suspend fun listMembers(condominiumId: String, role: String? = null): List<UserDto> =
+        http.get("condominiums/$condominiumId/members") { role?.let { parameter("role", it) } }
+            .body<PageDto<UserDto>>().items
 }
 
 class NoticesApiService(private val http: HttpClient) {
@@ -225,6 +228,8 @@ class ChatApiService(private val http: HttpClient) {
             .body<PageDto<ChatThreadDto>>().items
     suspend fun createThread(condominiumId: String, body: CreateChatThreadRequestDto): ChatThreadDto =
         http.post("condominiums/$condominiumId/chat-threads") { setBody(body) }.body()
+    suspend fun ensureCondoGroup(condominiumId: String): ChatThreadDto =
+        http.get("condominiums/$condominiumId/chat-threads/group").body()
     suspend fun listMessages(threadId: String, since: String? = null): List<ChatMessageDto> =
         http.get("chat-threads/$threadId/messages") { since?.let { parameter("since", it) } }
             .body<PageDto<ChatMessageDto>>().items

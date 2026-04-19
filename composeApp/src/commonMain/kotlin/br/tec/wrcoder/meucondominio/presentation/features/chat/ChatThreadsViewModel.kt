@@ -7,11 +7,12 @@ import br.tec.wrcoder.meucondominio.domain.model.ChatThread
 import br.tec.wrcoder.meucondominio.domain.model.User
 import br.tec.wrcoder.meucondominio.domain.model.UserRole
 import br.tec.wrcoder.meucondominio.domain.repository.AuthRepository
-import br.tec.wrcoder.meucondominio.data.repository.InMemoryStore
 import br.tec.wrcoder.meucondominio.domain.repository.ChatRepository
+import br.tec.wrcoder.meucondominio.domain.repository.UserDirectory
 import br.tec.wrcoder.meucondominio.presentation.navigation.AppNavigator
 import br.tec.wrcoder.meucondominio.presentation.navigation.Route
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 data class ChatThreadsUiState(
@@ -32,7 +34,7 @@ data class ChatThreadsUiState(
 class ChatThreadsViewModel(
     private val chat: ChatRepository,
     private val auth: AuthRepository,
-    private val store: InMemoryStore,
+    private val users: UserDirectory,
     private val navigator: AppNavigator,
 ) : ViewModel() {
 
@@ -44,21 +46,37 @@ class ChatThreadsViewModel(
             if (u == null) flowOf(emptyList()) else chat.observeThreads(u.condominiumId, u.id)
         },
         me,
-        store.users,
+        me.flatMapLatest { u ->
+            if (u == null) flowOf(emptyList()) else users.observeUsers(u.condominiumId)
+        },
         _error,
-    ) { threads, u, users, error ->
+    ) { threads, u, people, error ->
         ChatThreadsUiState(
             threads = threads,
             me = u,
-            contacts = if (u == null) emptyList()
-            else users.filter {
-                it.condominiumId == u.condominiumId &&
-                    it.id != u.id &&
-                    it.role == UserRole.SUPERVISOR
+            contacts = if (u == null) emptyList() else people.filter {
+                it.id != u.id && it.role in visibleRoles(u.role)
             },
             error = error,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, ChatThreadsUiState())
+
+    fun refreshContacts() {
+        val u = me.value ?: return
+        viewModelScope.launch {
+            users.refresh(u.condominiumId)
+            chat.ensureCondoGroup(u.condominiumId)
+        }
+    }
+
+    init {
+        viewModelScope.launch {
+            while (isActive) {
+                delay(3_000)
+                me.value?.let { runCatching { chat.refreshThreads(it.condominiumId) } }
+            }
+        }
+    }
 
     fun openOrCreate(contact: User) {
         val u = me.value ?: return
@@ -74,4 +92,10 @@ class ChatThreadsViewModel(
     fun open(thread: ChatThread) = navigator.go(Route.Chat(thread.id))
 
     fun clearError() { _error.value = null }
+
+    private fun visibleRoles(role: UserRole): Set<UserRole> = when (role) {
+        UserRole.RESIDENT -> setOf(UserRole.ADMIN, UserRole.SUPERVISOR)
+        UserRole.SUPERVISOR, UserRole.ADMIN ->
+            setOf(UserRole.ADMIN, UserRole.SUPERVISOR, UserRole.RESIDENT)
+    }
 }
