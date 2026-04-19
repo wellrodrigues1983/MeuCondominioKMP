@@ -23,7 +23,6 @@ import kotlinx.coroutines.launch
 
 data class ChatThreadUiState(
     val messages: List<ChatMessage> = emptyList(),
-    val input: String = "",
     val me: User? = null,
     val usersById: Map<String, User> = emptyMap(),
 )
@@ -61,22 +60,19 @@ class ChatThreadViewModel(
         }
         viewModelScope.launch {
             while (isActive && currentThreadId == threadId) {
-                delay(1_500)
+                delay(3_000)
                 runCatching { chat.refreshMessages(threadId) }
             }
         }
     }
 
-    fun onInput(v: String) = _state.update { it.copy(input = v) }
-
-    fun send() {
+    fun send(text: String) {
         val threadId = currentThreadId ?: return
         val u = me.value ?: return
-        val text = _state.value.input
-        if (text.isBlank()) return
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return
         viewModelScope.launch {
-            chat.send(threadId, u.id, text)
-            _state.update { it.copy(input = "") }
+            chat.send(threadId, u.id, trimmed)
         }
     }
 }

@@ -31,6 +31,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
@@ -57,6 +61,7 @@ fun ChatThreadScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
     val density = LocalDensity.current
     val imeBottomPx = WindowInsets.ime.getBottom(density)
+    var input by rememberSaveable(threadId) { mutableStateOf("") }
 
     LaunchedEffect(s.messages.size) {
         if (s.messages.isNotEmpty()) listState.animateScrollToItem(s.messages.size - 1)
@@ -144,15 +149,21 @@ fun ChatThreadScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     OutlinedTextField(
-                        s.input,
-                        onValueChange = vm::onInput,
+                        value = input,
+                        onValueChange = { input = it },
                         placeholder = { Text("Mensagem") },
                         shape = RoundedCornerShape(24.dp),
                         modifier = Modifier.weight(1f),
                     )
                     Spacer(Modifier.size(8.dp))
                     FloatingActionButton(
-                        onClick = vm::send,
+                        onClick = {
+                            val text = input
+                            if (text.isNotBlank()) {
+                                input = ""
+                                vm.send(text)
+                            }
+                        },
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.size(48.dp),

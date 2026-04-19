@@ -27,6 +27,8 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import io.ktor.http.withCharset
+import io.ktor.utils.io.charsets.Charsets
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.util.AttributeKey
 import kotlinx.coroutines.sync.Mutex
@@ -110,7 +112,7 @@ fun createHttpClient(tokenStore: TokenStore): HttpClient {
         }
         defaultRequest {
             url(BuildConfig.API_BASE_URL.trimEnd('/') + "/")
-            contentType(ContentType.Application.Json)
+            contentType(ContentType.Application.Json.withCharset(Charsets.UTF_8))
         }
     }
 

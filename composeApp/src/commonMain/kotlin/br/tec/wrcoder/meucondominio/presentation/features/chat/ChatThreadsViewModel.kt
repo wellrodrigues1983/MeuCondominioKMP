@@ -72,7 +72,7 @@ class ChatThreadsViewModel(
     init {
         viewModelScope.launch {
             while (isActive) {
-                delay(3_000)
+                delay(8_000)
                 me.value?.let { runCatching { chat.refreshThreads(it.condominiumId) } }
             }
         }
