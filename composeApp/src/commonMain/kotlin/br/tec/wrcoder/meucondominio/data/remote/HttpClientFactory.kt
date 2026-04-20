@@ -1,6 +1,7 @@
 package br.tec.wrcoder.meucondominio.data.remote
 
 import br.tec.wrcoder.meucondominio.core.BuildConfig
+import br.tec.wrcoder.meucondominio.core.logging.AppLogger
 import br.tec.wrcoder.meucondominio.core.storage.AuthTokens
 import br.tec.wrcoder.meucondominio.core.storage.TokenStore
 import io.ktor.client.HttpClient
@@ -72,12 +73,13 @@ fun createHttpClient(tokenStore: TokenStore): HttpClient {
             socketTimeoutMillis = 20_000
         }
         install(Logging) {
+            val ktorLog = AppLogger.withTag("Ktor")
             logger = object : Logger {
                 override fun log(message: String) {
-                    println("[Ktor] $message")
+                    ktorLog.d { message }
                 }
             }
-            level = LogLevel.ALL
+            level = LogLevel.HEADERS
         }
         install(WebSockets) {
             pingIntervalMillis = 20_000
@@ -148,7 +150,7 @@ private suspend fun forceRefresh(client: HttpClient, tokenStore: TokenStore): Au
         client.authProvider<BearerAuthProvider>()?.clearToken()
         fresh
     } catch (t: Throwable) {
-        println("[Auth] forceRefresh failed: ${t.message}")
+        AppLogger.withTag("Auth").w(t) { "forceRefresh failed" }
         tokenStore.clear()
         null
     }

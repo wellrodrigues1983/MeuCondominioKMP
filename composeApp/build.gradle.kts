@@ -106,6 +106,7 @@ kotlin {
             implementation(libs.filekit.core)
             implementation(libs.filekit.compose)
             implementation(libs.coil.compose)
+            implementation(libs.kermit)
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)

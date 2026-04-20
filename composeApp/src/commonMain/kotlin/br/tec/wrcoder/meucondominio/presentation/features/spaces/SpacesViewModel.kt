@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import br.tec.wrcoder.meucondominio.core.AppResult
 import br.tec.wrcoder.meucondominio.core.formatBr
+import br.tec.wrcoder.meucondominio.core.logging.AppLogger
 import br.tec.wrcoder.meucondominio.domain.model.Action
 import br.tec.wrcoder.meucondominio.domain.model.CommonSpace
 import br.tec.wrcoder.meucondominio.domain.model.Permissions
@@ -54,6 +55,7 @@ class SpacesViewModel(
     private val media: MediaRepository,
 ) : ViewModel() {
 
+    private val log = AppLogger.withTag("Spaces")
     private val user = auth.session.map { it?.user }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
@@ -120,7 +122,7 @@ class SpacesViewModel(
 
     fun reserve(space: CommonSpace, date: LocalDate) {
         val u = user.value
-        println("[Spaces] reserve tap space=${space.id} date=$date user=${u?.id} unitId=${u?.unitId}")
+        log.i { "reserve tap space=${space.id} date=$date user=${u?.id} unitId=${u?.unitId}" }
         if (u == null) {
             _error.value = "Sessão inválida. Entre novamente."
             return
@@ -131,7 +133,7 @@ class SpacesViewModel(
         }
         viewModelScope.launch {
             val r = spaceRepository.reserve(space.id, u.unitId, u.id, date)
-            println("[Spaces] reserve result=$r")
+            log.i { "reserve result=$r" }
             when (r) {
                 is AppResult.Success -> _notice.value = "Reserva de ${space.name} confirmada para ${date.formatBr()}."
                 is AppResult.Failure -> _error.value = r.error.message

@@ -4,6 +4,7 @@ import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import br.tec.wrcoder.meucondominio.core.AppClock
 import br.tec.wrcoder.meucondominio.core.AppResult
+import br.tec.wrcoder.meucondominio.core.logging.AppLogger
 import br.tec.wrcoder.meucondominio.core.newId
 import br.tec.wrcoder.meucondominio.core.network.NetworkMonitor
 import br.tec.wrcoder.meucondominio.data.local.db.MeuCondominioDb
@@ -52,6 +53,7 @@ class RemoteNoticesRepository(
     private val json: Json,
 ) : NoticeRepository {
 
+    private val log = AppLogger.withTag("Notices")
     private val bgScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     init {
@@ -120,13 +122,13 @@ class RemoteNoticesRepository(
 
     private suspend fun pull(condominiumId: String) {
         if (!network.isOnline.value) {
-            println("[Notices] pull ignorado: offline")
+            log.i { "pull ignorado: offline" }
             return
         }
-        println("[Notices] pull iniciado para condominiumId=$condominiumId")
+        log.i { "pull iniciado para condominiumId=$condominiumId" }
         runCatching { api.list(condominiumId, null) }
             .onSuccess { items ->
-                println("[Notices] pull sucesso: ${items.size} itens do backend")
+                log.i { "pull sucesso: ${items.size} itens do backend" }
                 val serverIds = items.map { it.id }.toSet()
                 val localIds = db.noticeQueries.idsByCondominium(condominiumId).executeAsList().toSet()
                 (localIds - serverIds).forEach { db.noticeQueries.deleteById(it) }
@@ -135,7 +137,7 @@ class RemoteNoticesRepository(
                     db.syncMetadataQueries.upsertCursor(SyncCursors.noticesOf(condominiumId), it)
                 }
             }
-            .onFailure { println("[Notices] pull falhou: ${it::class.simpleName}: ${it.message}") }
+            .onFailure { log.w(it) { "pull falhou" } }
     }
 
     private fun persist(dto: NoticeDto) {

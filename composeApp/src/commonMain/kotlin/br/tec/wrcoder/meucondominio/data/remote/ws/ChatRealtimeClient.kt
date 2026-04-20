@@ -1,6 +1,7 @@
 package br.tec.wrcoder.meucondominio.data.remote.ws
 
 import br.tec.wrcoder.meucondominio.core.BuildConfig
+import br.tec.wrcoder.meucondominio.core.logging.AppLogger
 import br.tec.wrcoder.meucondominio.core.network.NetworkMonitor
 import br.tec.wrcoder.meucondominio.core.storage.AuthTokens
 import br.tec.wrcoder.meucondominio.core.storage.TokenStore
@@ -57,6 +58,7 @@ class ChatRealtimeClient(
     private val network: NetworkMonitor,
     private val json: Json,
 ) {
+    private val log = AppLogger.withTag("ChatWS")
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val _events = MutableSharedFlow<ChatRealtimeEvent>(
         replay = 0,
@@ -90,12 +92,12 @@ class ChatRealtimeClient(
                 onSuccess = { reason -> reason?.code?.toInt() == AUTH_CLOSE_CODE },
                 onFailure = { t ->
                     val msg = t.message.orEmpty()
-                    println("[ChatWS] disconnected: $msg")
+                    log.i { "disconnected: $msg" }
                     msg.contains("401") || msg.contains("Unauthorized", ignoreCase = true)
                 },
             )
             if (needsRefresh) {
-                println("[ChatWS] auth-related close; refreshing token before reconnect")
+                log.i { "auth-related close; refreshing token before reconnect" }
                 val refreshed = refreshMutex.withLock { refreshAccessToken() }
                 if (refreshed != null) {
                     attempt = 0
@@ -110,7 +112,7 @@ class ChatRealtimeClient(
 
     private suspend fun connectOnce(token: String): CloseReason? {
         val url = buildWsUrl(token)
-        println("[ChatWS] connecting $url")
+        log.i { "connecting" }
         val session = http.webSocketSession(url)
         try {
             for (frame in session.incoming) {
@@ -121,7 +123,7 @@ class ChatRealtimeClient(
             runCatching { session.close() }
         }
         val reason = runCatching { session.closeReason.await() }.getOrNull()
-        if (reason != null) println("[ChatWS] closed code=${reason.code} message=${reason.message}")
+        if (reason != null) log.i { "closed code=${reason.code} message=${reason.message}" }
         return reason
     }
 
@@ -140,7 +142,7 @@ class ChatRealtimeClient(
             http.authProvider<BearerAuthProvider>()?.clearToken()
             fresh.accessToken
         } catch (t: Throwable) {
-            println("[ChatWS] refresh failed: ${t.message}")
+            log.w(t) { "refresh failed" }
             null
         }
     }

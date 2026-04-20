@@ -1,0 +1,43 @@
+CREATE TABLE audit_log_entity (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    timestamp INTEGER NOT NULL,
+    level TEXT NOT NULL,
+    tag TEXT NOT NULL,
+    message TEXT NOT NULL,
+    throwable TEXT,
+    sessionId TEXT NOT NULL,
+    userId TEXT
+);
+
+CREATE INDEX audit_log_timestamp ON audit_log_entity(timestamp);
+CREATE INDEX audit_log_session ON audit_log_entity(sessionId);
+
+CREATE TRIGGER audit_log_ring_buffer AFTER INSERT ON audit_log_entity
+WHEN (SELECT COUNT(*) FROM audit_log_entity) > 2000
+BEGIN
+    DELETE FROM audit_log_entity
+    WHERE id IN (
+        SELECT id FROM audit_log_entity
+        ORDER BY id ASC
+        LIMIT (SELECT COUNT(*) FROM audit_log_entity) - 2000
+    );
+END;
+
+insert:
+INSERT INTO audit_log_entity(timestamp, level, tag, message, throwable, sessionId, userId)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+recent:
+SELECT * FROM audit_log_entity ORDER BY id DESC LIMIT ?;
+
+bySession:
+SELECT * FROM audit_log_entity WHERE sessionId = ? ORDER BY id ASC;
+
+sessionsWithCrashes:
+SELECT DISTINCT sessionId FROM audit_log_entity WHERE level = 'CRASH' ORDER BY id DESC;
+
+countAll:
+SELECT COUNT(*) FROM audit_log_entity;
+
+clear:
+DELETE FROM audit_log_entity;

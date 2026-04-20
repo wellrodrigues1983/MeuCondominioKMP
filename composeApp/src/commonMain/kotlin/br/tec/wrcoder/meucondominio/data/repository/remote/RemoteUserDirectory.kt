@@ -2,6 +2,7 @@ package br.tec.wrcoder.meucondominio.data.repository.remote
 
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
+import br.tec.wrcoder.meucondominio.core.logging.AppLogger
 import br.tec.wrcoder.meucondominio.core.network.NetworkMonitor
 import br.tec.wrcoder.meucondominio.data.local.db.MeuCondominioDb
 import br.tec.wrcoder.meucondominio.data.mapper.toEpoch
@@ -25,6 +26,7 @@ class RemoteUserDirectory(
     private val network: NetworkMonitor,
 ) : UserDirectory {
 
+    private val log = AppLogger.withTag("UserDir")
     private val bgScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val refreshed = mutableSetOf<String>()
 
@@ -51,9 +53,9 @@ class RemoteUserDirectory(
     override suspend fun refresh(condominiumId: String) {
         if (!network.isOnline.value) return
         runCatching { api.listMembers(condominiumId) }
-            .onFailure { println("[UserDir] listMembers failed: ${it.message}") }
+            .onFailure { log.w(it) { "listMembers failed" } }
             .onSuccess { list ->
-                println("[UserDir] listMembers($condominiumId) returned ${list.size}")
+                log.i { "listMembers($condominiumId) returned ${list.size}" }
                 list.forEach(::persistUser)
                 refreshed += condominiumId
             }

@@ -5,6 +5,7 @@ import app.cash.sqldelight.coroutines.mapToList
 import br.tec.wrcoder.meucondominio.core.AppClock
 import br.tec.wrcoder.meucondominio.core.AppError
 import br.tec.wrcoder.meucondominio.core.AppResult
+import br.tec.wrcoder.meucondominio.core.logging.AppLogger
 import br.tec.wrcoder.meucondominio.core.network.NetworkMonitor
 import br.tec.wrcoder.meucondominio.core.newId
 import br.tec.wrcoder.meucondominio.data.local.db.MeuCondominioDb
@@ -70,6 +71,7 @@ class RemoteSpacesRepository(
     private val media: MediaRepository,
 ) : SpaceRepository {
 
+    private val log = AppLogger.withTag("Spaces")
     private val bgScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val reconciledSpaces = mutableSetOf<String>()
     private val reconciledReservationsBySpace = mutableSetOf<String>()
@@ -96,9 +98,9 @@ class RemoteSpacesRepository(
         }
         dispatcher.register(Entities.RESERVATION, Ops.CREATE) { payload, _ ->
             val p = json.decodeFromString(ReservePayload.serializer(), payload)
-            println("[Spaces] dispatcher RESERVATION.CREATE space=${p.spaceId} unit=${p.unitId} date=${p.date}")
+            log.i { "dispatcher RESERVATION.CREATE space=${p.spaceId} unit=${p.unitId} date=${p.date}" }
             val dto = api.reserve(p.spaceId, CreateReservationRequestDto(p.unitId, p.date))
-            println("[Spaces] dispatcher RESERVATION.CREATE -> server id=${dto.id} status=${dto.status}")
+            log.i { "dispatcher RESERVATION.CREATE -> server id=${dto.id} status=${dto.status}" }
             if (dto.id != p.id) db.spaceQueries.deleteReservationById(p.id)
             persistReservation(dto)
         }
@@ -169,12 +171,12 @@ class RemoteSpacesRepository(
     override suspend fun reserve(
         spaceId: String, unitId: String, residentUserId: String, date: LocalDate,
     ): AppResult<Reservation> {
-        println("[Spaces] reserve repo enter space=$spaceId unit=$unitId user=$residentUserId date=$date")
+        log.i { "reserve repo enter space=$spaceId unit=$unitId user=$residentUserId date=$date" }
         val id = newId()
         val now = clock.now()
         val space = db.spaceQueries.getSpace(spaceId).executeAsOneOrNull()
             ?: run {
-                println("[Spaces] reserve repo: space $spaceId not found locally")
+                log.w { "reserve repo: space $spaceId not found locally" }
                 return AppResult.Failure(AppError.NotFound("Espaço não encontrado"))
             }
         val unitIdentifier = db.condominiumQueries.getUnit(unitId).executeAsOneOrNull()?.identifier.orEmpty()
@@ -191,10 +193,10 @@ class RemoteSpacesRepository(
         dispatcher.enqueue(Entities.RESERVATION, Ops.CREATE, id,
             json.encodeToString(ReservePayload.serializer(),
                 ReservePayload(id, spaceId, unitId, date.toString())))
-        println("[Spaces] reserve repo enqueued id=$id")
+        log.i { "reserve repo enqueued id=$id" }
         if (network.isOnline.value) {
             val drain = runCatching { dispatcher.drain() }
-            println("[Spaces] reserve repo drain result=$drain")
+            log.i { "reserve repo drain result=$drain" }
             if (drain.isFailure) {
                 return AppResult.Failure(AppError.Network(
                     drain.exceptionOrNull()?.message ?: "Falha ao reservar"
@@ -232,12 +234,12 @@ class RemoteSpacesRepository(
     }
 
     private suspend fun pullSpaces(condominiumId: String) {
-        println("[Spaces] pullSpaces(condo=$condominiumId) online=${network.isOnline.value}")
+        log.i { "pullSpaces(condo=$condominiumId) online=${network.isOnline.value}" }
         if (!network.isOnline.value) return
         runCatching { api.listSpaces(condominiumId, null) }
-            .onFailure { println("[Spaces] listSpaces failed: ${it.message}") }
+            .onFailure { log.w(it) { "listSpaces failed" } }
             .onSuccess { items ->
-                println("[Spaces] listSpaces returned ${items.size} items")
+                log.i { "listSpaces returned ${items.size} items" }
                 val serverIds = items.map { it.id }.toSet()
                 val localIds = db.spaceQueries.idsSpacesByCondominium(condominiumId).executeAsList().toSet()
                 (localIds - serverIds).forEach { db.spaceQueries.deleteSpaceById(it) }
@@ -251,10 +253,10 @@ class RemoteSpacesRepository(
                     .filter { it.isNotBlank() && !it.startsWith("memory://") }
                     .distinct()
                     .forEach { url ->
-                        println("[Spaces] prefetch image url=$url")
+                        log.d { "prefetch image url=$url" }
                         bgScope.launch {
                             val r = media.fetchImageBytes(url)
-                            println("[Spaces] prefetch result url=$url -> $r")
+                            log.d { "prefetch result url=$url -> $r" }
                         }
                     }
             }
@@ -305,9 +307,9 @@ class RemoteSpacesRepository(
     private fun persistSpace(dto: CommonSpaceDto) {
         val sanitized = dto.imageUrls.filter { it.isNotBlank() && !it.startsWith("memory://") }
         if (sanitized.size != dto.imageUrls.size) {
-            println("[Spaces] persistSpace dropped ${dto.imageUrls.size - sanitized.size} invalid URL(s) id=${dto.id}")
+            log.w { "persistSpace dropped ${dto.imageUrls.size - sanitized.size} invalid URL(s) id=${dto.id}" }
         }
-        println("[Spaces] persistSpace id=${dto.id} name=${dto.name} imageUrls=$sanitized")
+        log.d { "persistSpace id=${dto.id} name=${dto.name} imageUrls=$sanitized" }
         db.spaceQueries.upsertSpace(
             id = dto.id, condominiumId = dto.condominiumId, name = dto.name, description = dto.description,
             price = dto.price, imageUrlsJson = encodeStrings(sanitized),

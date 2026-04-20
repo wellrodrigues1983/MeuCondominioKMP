@@ -1,0 +1,28 @@
+CREATE TABLE telemetry_outbox_entity (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    sessionId TEXT NOT NULL UNIQUE,
+    reason TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    createdAt INTEGER NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    lastAttemptAt INTEGER
+);
+
+enqueue:
+INSERT OR IGNORE INTO telemetry_outbox_entity(sessionId, reason, payload, createdAt)
+VALUES (?, ?, ?, ?);
+
+nextBatch:
+SELECT * FROM telemetry_outbox_entity ORDER BY id ASC LIMIT ?;
+
+markAttempt:
+UPDATE telemetry_outbox_entity SET attempts = attempts + 1, lastAttemptAt = ? WHERE id = ?;
+
+deleteById:
+DELETE FROM telemetry_outbox_entity WHERE id = ?;
+
+existsForSession:
+SELECT COUNT(*) FROM telemetry_outbox_entity WHERE sessionId = ?;
+
+pendingCount:
+SELECT COUNT(*) FROM telemetry_outbox_entity;

@@ -4,6 +4,7 @@ import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import br.tec.wrcoder.meucondominio.core.AppClock
 import br.tec.wrcoder.meucondominio.core.AppResult
+import br.tec.wrcoder.meucondominio.core.logging.AppLogger
 import br.tec.wrcoder.meucondominio.core.newId
 import br.tec.wrcoder.meucondominio.core.network.NetworkMonitor
 import br.tec.wrcoder.meucondominio.data.local.db.MeuCondominioDb
@@ -61,6 +62,7 @@ class RemoteChatRepository(
     private val realtime: ChatRealtimeClient,
 ) : ChatRepository {
 
+    private val log = AppLogger.withTag("ChatRepo")
     private val bgScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val stringListSerializer = ListSerializer(String.serializer())
     private val reconciledThreads = mutableSetOf<String>()
@@ -92,7 +94,7 @@ class RemoteChatRepository(
                         is ChatRealtimeEvent.MessageNew -> persistMessage(event.message)
                         is ChatRealtimeEvent.ThreadUpdate -> persistThread(event.thread)
                     }
-                }.onFailure { println("[ChatRepo] realtime event error: ${it.message}") }
+                }.onFailure { log.w(it) { "realtime event error" } }
             }
         }
         bgScope.launch {
@@ -193,7 +195,7 @@ class RemoteChatRepository(
                 val refreshed = db.chatQueries.getThread(dto.id).executeAsOneOrNull()
                 if (refreshed != null) return AppResult.Success(refreshed.toDomain())
             }
-            result.onFailure { println("[ChatRepo] ensureCondoGroup API failed: ${it.message}") }
+            result.onFailure { log.w(it) { "ensureCondoGroup API failed" } }
         }
         if (local != null) return AppResult.Success(local.toDomain())
         val id = newId()
@@ -230,7 +232,7 @@ class RemoteChatRepository(
             }
             items.forEach(::persistThread)
         }
-        result.onFailure { println("[ChatRepo] pullThreads(condo=$condominiumId) failed: ${it.message}") }
+        result.onFailure { log.w(it) { "pullThreads(condo=$condominiumId) failed" } }
     }
 
     private suspend fun pullMessages(threadId: String) {
@@ -246,7 +248,7 @@ class RemoteChatRepository(
             if (err is ClientRequestException && err.response.status == HttpStatusCode.NotFound) {
                 purgeGhostThread(threadId)
             } else {
-                println("[ChatRepo] pullMessages(thread=$threadId) failed: ${err.message}")
+                log.w(err) { "pullMessages(thread=$threadId) failed" }
             }
         }
     }
@@ -259,7 +261,7 @@ class RemoteChatRepository(
         db.chatQueries.deleteThreadById(threadId)
         reconciledMessages.remove(threadId)
         if (_activeThreadId.value == threadId) _activeThreadId.value = null
-        println("[ChatRepo] purged ghost thread=$threadId (server returned 404)")
+        log.i { "purged ghost thread=$threadId (server returned 404)" }
     }
 
     private fun persistThread(dto: ChatThreadDto) {

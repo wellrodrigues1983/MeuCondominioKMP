@@ -25,6 +25,7 @@ androidx-security = "1.1.0-alpha06"
 peekaboo = "0.5.2"
 filekit = "0.8.8"
 coil3 = "3.3.0"
+kermit = "2.0.4"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -79,6 +80,7 @@ peekaboo-imagePicker = { module = "io.github.onseok:peekaboo-image-picker", vers
 filekit-core = { module = "io.github.vinceglb:filekit-core", version.ref = "filekit" }
 filekit-compose = { module = "io.github.vinceglb:filekit-compose", version.ref = "filekit" }
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil3" }
+kermit = { module = "co.touchlab:kermit", version.ref = "kermit" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }
